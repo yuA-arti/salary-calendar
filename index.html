@@ -15,7 +15,7 @@
     --makes-color: #3b82f6;
     --h-color: #10b981;
     --allowance-color: #f59e0b;
-    --event-color: #8b5cf6;
+    --event-color: #ec4899; /* 予定カラーをピンク色に変更 */
     --holiday-bg: #fff1f2;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -132,7 +132,7 @@
     </div>
 
     <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:8px;">
-      <label class="form-label">大切な予定・メモ（シフト重複防止用）</label>
+      <label class="form-label" style="color:var(--event-color);">大切な予定・メモ（シフト重複防止用）</label>
       <input type="text" id="eventNote" class="form-input" placeholder="例: 参観日、通院、農作業">
     </div>
 
@@ -225,12 +225,10 @@
     document.getElementById('monthTitle').innerText = `${currentYear}年 ${currentMonth + 1}月`;
     const cal = document.getElementById('calendar');
     
-    // 既存セルのクリア
     const cells = cal.querySelectorAll('.day-cell');
     cells.forEach(c => c.remove());
 
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    // 月曜始まりのオフセット計算 (月:0, 火:1, ... 日:6)
     const offset = (firstDay + 6) % 7;
     const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
@@ -346,7 +344,6 @@
     updateSummary();
   }
 
-  // 平日（祝日を除く月〜金）一括入力
   function autoFillWeekdays() {
     if (!confirm(`${currentMonth + 1}月の平日（祝日を除く月〜金）にメークス出勤を一括入力しますか？`)) return;
 
@@ -356,7 +353,6 @@
       const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
       const isHoliday = !!HOLIDAYS[dateKey];
 
-      // 土日・祝日以外
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isHoliday) {
         if (!shiftData[dateKey]) shiftData[dateKey] = {};
         shiftData[dateKey].makes = true;
@@ -391,7 +387,6 @@
     document.getElementById('totalNet').innerText = `${totalNet.toLocaleString()}円`;
   }
 
-  // 設定モーダル
   function openSettingsModal() {
     document.getElementById('cfgMakesDaily').value = config.makesDaily;
     document.getElementById('cfgMakesRate').value = config.makesNetRate;
