@@ -15,7 +15,7 @@
     --makes-color: #3b82f6;
     --h-color: #10b981;
     --allowance-color: #f59e0b;
-    --event-color: #ec4899; /* 予定カラーをピンク色に変更 */
+    --event-color: #ec4899;
     --holiday-bg: #fff1f2;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -277,7 +277,7 @@
         if (data.event) {
           const b = document.createElement('div');
           b.className = 'badge badge-event';
-          b.innerText = `📌 ${data.event}`;
+          b.innerText = data.event; /* ピンマークを削除 */
           badgeList.appendChild(b);
         }
         if (data.makes) {
