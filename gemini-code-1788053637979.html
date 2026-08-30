@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>給与・シフト自動計算カレンダー</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --text: #1e293b;
+    --border: #e2e8f0;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --makes-color: #3b82f6;
+    --h-color: #10b981;
+    --allowance-color: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--bg); color: var(--text); padding: 16px; max-width: 900px; margin: 0 auto; }
+  
+  /* サマリーカード */
+  .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--card); padding: 14px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .card-title { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+  .card-val { font-size: 20px; font-weight: bold; }
+  .total-val { color: var(--primary); font-size: 24px; }
+
+  /* カレンダーヘッダー */
+  .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .cal-title { font-size: 18px; font-weight: bold; }
+  .btn { padding: 6px 14px; border: 1px solid var(--border); background: var(--card); border-radius: 8px; cursor: pointer; font-weight: 500; }
+  .btn:hover { background: var(--primary-light); border-color: var(--primary); }
+
+  /* カレンダーグリッド */
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; background: var(--card); padding: 12px; border-radius: 12px; border: 1px solid var(--border); }
+  .day-name { text-align: center; font-size: 12px; font-weight: bold; padding: 6px 0; color: #64748b; }
+  .day-name:first-child { color: #ef4444; }
+  .day-name:last-child { color: #3b82f6; }
+  
+  .day-cell { min-height: 85px; border: 1px solid var(--border); border-radius: 8px; padding: 4px; cursor: pointer; transition: all 0.15s ease; background: #fff; display: flex; flex-direction: column; justify-content: space-between; }
+  .day-cell:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .day-cell.empty { background: #f8fafc; border: none; cursor: default; }
+  .day-num { font-size: 12px; font-weight: bold; margin-bottom: 2px; }
+  .sunday .day-num { color: #ef4444; }
+  .saturday .day-num { color: #3b82f6; }
+
+  /* バッジ表示 */
+  .badge-list { display: flex; flex-direction: column; gap: 2px; }
+  .badge { font-size: 10px; padding: 2px 4px; border-radius: 4px; color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge-makes { background: var(--makes-color); }
+  .badge-h { background: var(--h-color); }
+  .badge-allowance { background: var(--allowance-color); }
+
+  /* モーダル */
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+  .modal-content { background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+  .modal-header { font-size: 16px; font-weight: bold; margin-bottom: 16px; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { display: block; font-size: 12px; color: #64748b; margin-bottom: 6px; font-weight: 500; }
+  .form-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+  .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<!-- 集計サマリー -->
+<div class="dashboard">
+  <div class="card">
+    <div class="card-title">当月 実入金手取り</div>
+    <div class="card-val total-val" id="totalNet">0円</div>
+  </div>
+  <div class="card">
+    <div class="card-title">メークス（手取り見込）</div>
+    <div class="card-val" id="makesNet">0円</div>
+  </div>
+  <div class="card">
+    <div class="card-title">H社（手取り見込）</div>
+    <div class="card-val" id="hNet">0円</div>
+  </div>
+  <div class="card">
+    <div class="card-title">手当・養育費 合計</div>
+    <div class="card-val" id="allowanceTotal">0円</div>
+  </div>
+</div>
+
+<!-- カレンダー操作 -->
+<div class="cal-header">
+  <button class="btn" onclick="prevMonth()">◀ 前月</button>
+  <div class="cal-title" id="monthTitle">2026年 9月</div>
+  <button class="btn" onclick="nextMonth()">翌月 ▶</button>
+</div>
+
+<!-- カレンダー枠 -->
+<div class="calendar-grid" id="calendar">
+  <div class="day-name">日</div><div class="day-name">月</div><div class="day-name">火</div>
+  <div class="day-name">水</div><div class="day-name">木</div><div class="day-name">金</div><div class="day-name">土</div>
+</div>
+
+<!-- 日付設定モーダル -->
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <div class="modal-header" id="modalDateTitle">日付設定</div>
+    
+    <div class="form-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="mCheck" style="width:18px;height:18px;">
+        メークス出勤 (日給+交通費)
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">H社 稼働時間 (時間入力 / 時給1,370円)</label>
+      <input type="number" id="hHours" class="form-input" placeholder="例: 3" min="0" step="0.5">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">手当・養育費・その他入金額 (円)</label>
+      <input type="number" id="allowanceAmt" class="form-input" placeholder="例: 40000" min="0" step="1000">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">手当の名称（任意）</label>
+      <input type="text" id="allowanceNote" class="form-input" placeholder="例: 養育費、児童手当">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">キャンセル</button>
+      <button class="btn" style="background:var(--primary);color:#fff;border:none;" onclick="saveDayData()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentYear = 2026;
+  let currentMonth = 8; // 9月 (0-indexed)
+  let selectedDateKey = null;
+  let shiftData = JSON.parse(localStorage.getItem('shift_data') || '{}');
+
+  // 計算パラメータ（明細実績ベース）
+  const MAKES_DAILY_GROSS = 1270 * 7 + 330; // 1日総支給 (約9,220円)
+  const MAKES_NET_RATE = 0.83;              // メークス手取り率 (約83%)
+  const H_HOURLY_RATE = 1370;               // H社時給
+  const H_NET_RATE = 0.96;                  // H社手取り率 (所得税控除後 約96%)
+
+  function init() {
+    renderCalendar();
+    updateSummary();
+  }
+
+  function renderCalendar() {
+    document.getElementById('monthTitle').innerText = `${currentYear}年 ${currentMonth + 1}月`;
+    const cal = document.getElementById('calendar');
+    
+    // ヘッダー以外のセルをクリア
+    const cells = cal.querySelectorAll('.day-cell');
+    cells.forEach(c => c.remove());
+
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) {
+      const empty = document.createElement('div');
+      empty.className = 'day-cell empty';
+      cal.appendChild(empty);
+    }
+
+    for (let d = 1; d <= lastDate; d++) {
+      const cell = document.createElement('div');
+      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
+      
+      cell.className = `day-cell ${dayOfWeek === 0 ? 'sunday' : dayOfWeek === 6 ? 'saturday' : ''}`;
+      cell.onclick = () => openModal(dateKey, d);
+
+      const dayNum = document.createElement('div');
+      dayNum.className = 'day-num';
+      dayNum.innerText = d;
+      cell.appendChild(dayNum);
+
+      const badgeList = document.createElement('div');
+      badgeList.className = 'badge-list';
+
+      const data = shiftData[dateKey];
+      if (data) {
+        if (data.makes) {
+          const b = document.createElement('div');
+          b.className = 'badge badge-makes';
+          b.innerText = 'メークス';
+          badgeList.appendChild(b);
+        }
+        if (data.hHours > 0) {
+          const b = document.createElement('div');
+          b.className = 'badge badge-h';
+          b.innerText = `H社 ${data.hHours}h`;
+          badgeList.appendChild(b);
+        }
+        if (data.allowance > 0) {
+          const b = document.createElement('div');
+          b.className = 'badge badge-allowance';
+          b.innerText = data.allowanceNote ? `${data.allowanceNote}` : `+${data.allowance.toLocaleString()}円`;
+          badgeList.appendChild(b);
+        }
+      }
+
+      cell.appendChild(badgeList);
+      cal.appendChild(cell);
+    }
+  }
+
+  function openModal(dateKey, day) {
+    selectedDateKey = dateKey;
+    document.getElementById('modalDateTitle').innerText = `${currentMonth + 1}月 ${day}日のシフト・入金設定`;
+    
+    const data = shiftData[dateKey] || { makes: false, hHours: 0, allowance: 0, allowanceNote: '' };
+    document.getElementById('mCheck').checked = !!data.makes;
+    document.getElementById('hHours').value = data.hHours || '';
+    document.getElementById('allowanceAmt').value = data.allowance || '';
+    document.getElementById('allowanceNote').value = data.allowanceNote || '';
+    
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+  }
+
+  function saveDayData() {
+    const makes = document.getElementById('mCheck').checked;
+    const hHours = parseFloat(document.getElementById('hHours').value) || 0;
+    const allowance = parseInt(document.getElementById('allowanceAmt').value, 10) || 0;
+    const allowanceNote = document.getElementById('allowanceNote').value.trim();
+
+    if (!makes && hHours === 0 && allowance === 0 && !allowanceNote) {
+      delete shiftData[selectedDateKey];
+    } else {
+      shiftData[selectedDateKey] = { makes, hHours, allowance, allowanceNote };
+    }
+
+    localStorage.setItem('shift_data', JSON.stringify(shiftData));
+    closeModal();
+    renderCalendar();
+    updateSummary();
+  }
+
+  function updateSummary() {
+    let makesDays = 0;
+    let hHoursTotal = 0;
+    let allowanceTotal = 0;
+
+    const prefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    for (const [key, val] of Object.entries(shiftData)) {
+      if (key.startsWith(prefix)) {
+        if (val.makes) makesDays++;
+        if (val.hHours) hHoursTotal += val.hHours;
+        if (val.allowance) allowanceTotal += val.allowance;
+      }
+    }
+
+    const makesNet = Math.round(makesDays * MAKES_DAILY_GROSS * MAKES_NET_RATE);
+    const hNet = Math.round(hHoursTotal * H_HOURLY_RATE * H_NET_RATE);
+    const totalNet = makesNet + hNet + allowanceTotal;
+
+    document.getElementById('makesNet').innerText = `${makesNet.toLocaleString()}円 (${makesDays}日)`;
+    document.getElementById('hNet').innerText = `${hNet.toLocaleString()}円 (${hHoursTotal}h)`;
+    document.getElementById('allowanceTotal').innerText = `${allowanceTotal.toLocaleString()}円`;
+    document.getElementById('totalNet').innerText = `${totalNet.toLocaleString()}円`;
+  }
+
+  function prevMonth() {
+    currentMonth--;
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    renderCalendar();
+    updateSummary();
+  }
+
+  function nextMonth() {
+    currentMonth++;
+    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+    renderCalendar();
+    updateSummary();
+  }
+
+  init();
+</script>
+</body>
+</html>
