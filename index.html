@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>給与・シフト自動計算カレンダー</title>
+<title>シフト・給与自動計算カレンダー</title>
 <style>
   :root {
     --primary: #2563eb;
@@ -15,35 +15,44 @@
     --makes-color: #3b82f6;
     --h-color: #10b981;
     --allowance-color: #f59e0b;
+    --event-color: #8b5cf6;
+    --holiday-bg: #fff1f2;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  body { background: var(--bg); color: var(--text); padding: 16px; max-width: 900px; margin: 0 auto; }
+  body { background: var(--bg); color: var(--text); padding: 12px; max-width: 950px; margin: 0 auto; }
   
   /* サマリーカード */
-  .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .card { background: var(--card); padding: 14px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-  .card-title { font-size: 12px; color: #64748b; margin-bottom: 4px; }
-  .card-val { font-size: 20px; font-weight: bold; }
-  .total-val { color: var(--primary); font-size: 24px; }
+  .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .card { background: var(--card); padding: 12px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .card-title { font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500; }
+  .card-val { font-size: 18px; font-weight: bold; }
+  .total-val { color: var(--primary); font-size: 22px; }
 
-  /* カレンダーヘッダー */
-  .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .cal-title { font-size: 18px; font-weight: bold; }
-  .btn { padding: 6px 14px; border: 1px solid var(--border); background: var(--card); border-radius: 8px; cursor: pointer; font-weight: 500; }
+  /* コントロールバー */
+  .ctrl-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .month-nav { display: flex; align-items: center; gap: 8px; }
+  .cal-title { font-size: 18px; font-weight: bold; min-width: 140px; text-align: center; }
+  .btn { padding: 7px 12px; border: 1px solid var(--border); background: var(--card); border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
   .btn:hover { background: var(--primary-light); border-color: var(--primary); }
+  .btn-primary { background: var(--primary); color: #fff; border: none; }
+  .btn-primary:hover { background: #1d4ed8; color: #fff; }
 
-  /* カレンダーグリッド */
-  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; background: var(--card); padding: 12px; border-radius: 12px; border: 1px solid var(--border); }
+  /* カレンダーグリッド（月曜始まり） */
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; background: var(--card); padding: 8px; border-radius: 12px; border: 1px solid var(--border); }
   .day-name { text-align: center; font-size: 12px; font-weight: bold; padding: 6px 0; color: #64748b; }
-  .day-name:first-child { color: #ef4444; }
-  .day-name:last-child { color: #3b82f6; }
+  .day-name.sat { color: #3b82f6; }
+  .day-name.sun { color: #ef4444; }
   
-  .day-cell { min-height: 85px; border: 1px solid var(--border); border-radius: 8px; padding: 4px; cursor: pointer; transition: all 0.15s ease; background: #fff; display: flex; flex-direction: column; justify-content: space-between; }
-  .day-cell:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .day-cell { min-height: 90px; border: 1px solid var(--border); border-radius: 8px; padding: 4px; cursor: pointer; background: #fff; display: flex; flex-direction: column; justify-content: space-between; transition: background 0.1s; }
+  .day-cell:hover { border-color: var(--primary); }
   .day-cell.empty { background: #f8fafc; border: none; cursor: default; }
-  .day-num { font-size: 12px; font-weight: bold; margin-bottom: 2px; }
-  .sunday .day-num { color: #ef4444; }
-  .saturday .day-num { color: #3b82f6; }
+  .day-cell.holiday { background: var(--holiday-bg); }
+  
+  .day-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
+  .day-num { font-size: 12px; font-weight: bold; }
+  .day-cell.sat .day-num { color: #3b82f6; }
+  .day-cell.sun .day-num, .day-cell.holiday .day-num { color: #ef4444; }
+  .holiday-tag { font-size: 9px; color: #ef4444; font-weight: normal; max-width: 65px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* バッジ表示 */
   .badge-list { display: flex; flex-direction: column; gap: 2px; }
@@ -51,21 +60,22 @@
   .badge-makes { background: var(--makes-color); }
   .badge-h { background: var(--h-color); }
   .badge-allowance { background: var(--allowance-color); }
+  .badge-event { background: var(--event-color); }
 
   /* モーダル */
   .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 100; padding: 16px; }
-  .modal-content { background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+  .modal-content { background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 420px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
   .modal-header { font-size: 16px; font-weight: bold; margin-bottom: 16px; }
-  .form-group { margin-bottom: 14px; }
-  .form-label { display: block; font-size: 12px; color: #64748b; margin-bottom: 6px; font-weight: 500; }
-  .form-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+  .form-group { margin-bottom: 12px; }
+  .form-label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; font-weight: 500; }
+  .form-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
   .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
-  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 </style>
 </head>
 <body>
 
-<!-- 集計サマリー -->
+<!-- サマリー -->
 <div class="dashboard">
   <div class="card">
     <div class="card-title">当月 実入金手取り</div>
@@ -85,17 +95,23 @@
   </div>
 </div>
 
-<!-- カレンダー操作 -->
-<div class="cal-header">
-  <button class="btn" onclick="prevMonth()">◀ 前月</button>
-  <div class="cal-title" id="monthTitle">2026年 9月</div>
-  <button class="btn" onclick="nextMonth()">翌月 ▶</button>
+<!-- コントロールバー -->
+<div class="ctrl-bar">
+  <div class="month-nav">
+    <button class="btn" onclick="prevMonth()">◀</button>
+    <div class="cal-title" id="monthTitle">2026年 9月</div>
+    <button class="btn" onclick="nextMonth()">▶</button>
+  </div>
+  <div style="display:flex; gap:6px;">
+    <button class="btn" onclick="autoFillWeekdays()">⚡ 平日一括入力</button>
+    <button class="btn" onclick="openSettingsModal()">⚙ 単価設定</button>
+  </div>
 </div>
 
-<!-- カレンダー枠 -->
+<!-- カレンダー枠（月曜始まり） -->
 <div class="calendar-grid" id="calendar">
-  <div class="day-name">日</div><div class="day-name">月</div><div class="day-name">火</div>
-  <div class="day-name">水</div><div class="day-name">木</div><div class="day-name">金</div><div class="day-name">土</div>
+  <div class="day-name">月</div><div class="day-name">火</div><div class="day-name">水</div>
+  <div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>
 </div>
 
 <!-- 日付設定モーダル -->
@@ -103,16 +119,21 @@
   <div class="modal-content">
     <div class="modal-header" id="modalDateTitle">日付設定</div>
     
-    <div class="form-group">
-      <label class="checkbox-label">
+    <div class="form-group" style="background:#f1f5f9; padding:8px; border-radius:8px;">
+      <label class="checkbox-label" style="font-weight:600;">
         <input type="checkbox" id="mCheck" style="width:18px;height:18px;">
         メークス出勤 (日給+交通費)
       </label>
     </div>
 
     <div class="form-group">
-      <label class="form-label">H社 稼働時間 (時間入力 / 時給1,370円)</label>
+      <label class="form-label">H社 稼働時間 (時間入力)</label>
       <input type="number" id="hHours" class="form-input" placeholder="例: 3" min="0" step="0.5">
+    </div>
+
+    <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:8px;">
+      <label class="form-label">大切な予定・メモ（シフト重複防止用）</label>
+      <input type="text" id="eventNote" class="form-input" placeholder="例: 参観日、通院、農作業">
     </div>
 
     <div class="form-group">
@@ -125,9 +146,48 @@
       <input type="text" id="allowanceNote" class="form-input" placeholder="例: 養育費、児童手当">
     </div>
 
+    <div class="form-group">
+      <label class="checkbox-label" style="font-size:12px; color:#ef4444;">
+        <input type="checkbox" id="isHolidayCheck">
+        この日を祝日として扱う (背景赤色)
+      </label>
+    </div>
+
     <div class="modal-actions">
       <button class="btn" onclick="closeModal()">キャンセル</button>
-      <button class="btn" style="background:var(--primary);color:#fff;border:none;" onclick="saveDayData()">保存</button>
+      <button class="btn btn-primary" onclick="saveDayData()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 単価設定モーダル -->
+<div class="modal" id="settingsModal">
+  <div class="modal-content">
+    <div class="modal-header">⚙ 給与・時給単価設定</div>
+    
+    <div class="form-group">
+      <label class="form-label">メークス 1日総支給額（時給7h＋交通費）</label>
+      <input type="number" id="cfgMakesDaily" class="form-input">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">メークス 手取り率（%）</label>
+      <input type="number" id="cfgMakesRate" class="form-input" placeholder="例: 83">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">H社 時給（円）</label>
+      <input type="number" id="cfgHourlyH" class="form-input">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">H社 手取り率（%）</label>
+      <input type="number" id="cfgHRate" class="form-input" placeholder="例: 96">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSettingsModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSettings()">設定を保存</button>
     </div>
   </div>
 </div>
@@ -136,13 +196,25 @@
   let currentYear = 2026;
   let currentMonth = 8; // 9月 (0-indexed)
   let selectedDateKey = null;
-  let shiftData = JSON.parse(localStorage.getItem('shift_data') || '{}');
 
-  // 計算パラメータ（明細実績ベース）
-  const MAKES_DAILY_GROSS = 1270 * 7 + 330; // 1日総支給 (約9,220円)
-  const MAKES_NET_RATE = 0.83;              // メークス手取り率 (約83%)
-  const H_HOURLY_RATE = 1370;               // H社時給
-  const H_NET_RATE = 0.96;                  // H社手取り率 (所得税控除後 約96%)
+  // 保存データの読み込み
+  let shiftData = JSON.parse(localStorage.getItem('shift_data') || '{}');
+  let config = JSON.parse(localStorage.getItem('shift_config') || JSON.stringify({
+    makesDaily: 9220,
+    makesNetRate: 83,
+    hHourly: 1370,
+    hNetRate: 96
+  }));
+
+  // 日本の祝日データ（2026年〜2027年）
+  const HOLIDAYS = {
+    "2026-01-01": "元日", "2026-01-12": "成人の日", "2026-02-11": "建国記念の日", "2026-02-23": "天皇誕生日",
+    "2026-03-20": "春分の日", "2026-04-29": "昭和の日", "2026-05-03": "憲法記念日", "2026-05-04": "みどりの日",
+    "2026-05-05": "こどもの日", "2026-05-06": "振替休日", "2026-07-20": "海の日", "2026-08-11": "山の日",
+    "2026-09-21": "敬老の日", "2026-09-22": "国民の休日", "2026-09-23": "秋分の日", "2026-10-12": "スポーツの日",
+    "2026-11-03": "文化の日", "2026-11-23": "勤労感謝の日",
+    "2027-01-01": "元日", "2027-01-11": "成人の日", "2027-02-11": "建国記念の日", "2027-02-23": "天皇誕生日"
+  };
 
   function init() {
     renderCalendar();
@@ -153,14 +225,16 @@
     document.getElementById('monthTitle').innerText = `${currentYear}年 ${currentMonth + 1}月`;
     const cal = document.getElementById('calendar');
     
-    // ヘッダー以外のセルをクリア
+    // 既存セルのクリア
     const cells = cal.querySelectorAll('.day-cell');
     cells.forEach(c => c.remove());
 
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    // 月曜始まりのオフセット計算 (月:0, 火:1, ... 日:6)
+    const offset = (firstDay + 6) % 7;
     const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-    for (let i = 0; i < firstDay; i++) {
+    for (let i = 0; i < offset; i++) {
       const empty = document.createElement('div');
       empty.className = 'day-cell empty';
       cal.appendChild(empty);
@@ -171,19 +245,43 @@
       const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
       
-      cell.className = `day-cell ${dayOfWeek === 0 ? 'sunday' : dayOfWeek === 6 ? 'saturday' : ''}`;
-      cell.onclick = () => openModal(dateKey, d);
+      const isAutoHoliday = !!HOLIDAYS[dateKey];
+      const data = shiftData[dateKey];
+      const isCustomHoliday = data && data.isHoliday !== undefined ? data.isHoliday : isAutoHoliday;
+
+      let classList = ['day-cell'];
+      if (dayOfWeek === 6) classList.push('sat');
+      if (dayOfWeek === 0) classList.push('sun');
+      if (isCustomHoliday) classList.push('holiday');
+      cell.className = classList.join(' ');
+      cell.onclick = () => openModal(dateKey, d, isAutoHoliday);
+
+      const dayTop = document.createElement('div');
+      dayTop.className = 'day-top';
 
       const dayNum = document.createElement('div');
       dayNum.className = 'day-num';
       dayNum.innerText = d;
-      cell.appendChild(dayNum);
+      dayTop.appendChild(dayNum);
+
+      if (isAutoHoliday) {
+        const holiTag = document.createElement('div');
+        holiTag.className = 'holiday-tag';
+        holiTag.innerText = HOLIDAYS[dateKey];
+        dayTop.appendChild(holiTag);
+      }
+      cell.appendChild(dayTop);
 
       const badgeList = document.createElement('div');
       badgeList.className = 'badge-list';
 
-      const data = shiftData[dateKey];
       if (data) {
+        if (data.event) {
+          const b = document.createElement('div');
+          b.className = 'badge badge-event';
+          b.innerText = `📌 ${data.event}`;
+          badgeList.appendChild(b);
+        }
         if (data.makes) {
           const b = document.createElement('div');
           b.className = 'badge badge-makes';
@@ -209,15 +307,17 @@
     }
   }
 
-  function openModal(dateKey, day) {
+  function openModal(dateKey, day, isAutoHoliday) {
     selectedDateKey = dateKey;
-    document.getElementById('modalDateTitle').innerText = `${currentMonth + 1}月 ${day}日のシフト・入金設定`;
+    document.getElementById('modalDateTitle').innerText = `${currentMonth + 1}月 ${day}日の設定`;
     
-    const data = shiftData[dateKey] || { makes: false, hHours: 0, allowance: 0, allowanceNote: '' };
+    const data = shiftData[dateKey] || {};
     document.getElementById('mCheck').checked = !!data.makes;
     document.getElementById('hHours').value = data.hHours || '';
+    document.getElementById('eventNote').value = data.event || '';
     document.getElementById('allowanceAmt').value = data.allowance || '';
     document.getElementById('allowanceNote').value = data.allowanceNote || '';
+    document.getElementById('isHolidayCheck').checked = data.isHoliday !== undefined ? data.isHoliday : isAutoHoliday;
     
     document.getElementById('modal').style.display = 'flex';
   }
@@ -229,17 +329,40 @@
   function saveDayData() {
     const makes = document.getElementById('mCheck').checked;
     const hHours = parseFloat(document.getElementById('hHours').value) || 0;
+    const event = document.getElementById('eventNote').value.trim();
     const allowance = parseInt(document.getElementById('allowanceAmt').value, 10) || 0;
     const allowanceNote = document.getElementById('allowanceNote').value.trim();
+    const isHoliday = document.getElementById('isHolidayCheck').checked;
 
-    if (!makes && hHours === 0 && allowance === 0 && !allowanceNote) {
+    if (!makes && hHours === 0 && allowance === 0 && !allowanceNote && !event && !isHoliday) {
       delete shiftData[selectedDateKey];
     } else {
-      shiftData[selectedDateKey] = { makes, hHours, allowance, allowanceNote };
+      shiftData[selectedDateKey] = { makes, hHours, event, allowance, allowanceNote, isHoliday };
     }
 
     localStorage.setItem('shift_data', JSON.stringify(shiftData));
     closeModal();
+    renderCalendar();
+    updateSummary();
+  }
+
+  // 平日（祝日を除く月〜金）一括入力
+  function autoFillWeekdays() {
+    if (!confirm(`${currentMonth + 1}月の平日（祝日を除く月〜金）にメークス出勤を一括入力しますか？`)) return;
+
+    const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+    for (let d = 1; d <= lastDate; d++) {
+      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
+      const isHoliday = !!HOLIDAYS[dateKey];
+
+      // 土日・祝日以外
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isHoliday) {
+        if (!shiftData[dateKey]) shiftData[dateKey] = {};
+        shiftData[dateKey].makes = true;
+      }
+    }
+    localStorage.setItem('shift_data', JSON.stringify(shiftData));
     renderCalendar();
     updateSummary();
   }
@@ -258,14 +381,39 @@
       }
     }
 
-    const makesNet = Math.round(makesDays * MAKES_DAILY_GROSS * MAKES_NET_RATE);
-    const hNet = Math.round(hHoursTotal * H_HOURLY_RATE * H_NET_RATE);
+    const makesNet = Math.round(makesDays * config.makesDaily * (config.makesNetRate / 100));
+    const hNet = Math.round(hHoursTotal * config.hHourly * (config.hNetRate / 100));
     const totalNet = makesNet + hNet + allowanceTotal;
 
     document.getElementById('makesNet').innerText = `${makesNet.toLocaleString()}円 (${makesDays}日)`;
     document.getElementById('hNet').innerText = `${hNet.toLocaleString()}円 (${hHoursTotal}h)`;
     document.getElementById('allowanceTotal').innerText = `${allowanceTotal.toLocaleString()}円`;
     document.getElementById('totalNet').innerText = `${totalNet.toLocaleString()}円`;
+  }
+
+  // 設定モーダル
+  function openSettingsModal() {
+    document.getElementById('cfgMakesDaily').value = config.makesDaily;
+    document.getElementById('cfgMakesRate').value = config.makesNetRate;
+    document.getElementById('cfgHourlyH').value = config.hHourly;
+    document.getElementById('cfgHRate').value = config.hNetRate;
+    document.getElementById('settingsModal').style.display = 'flex';
+  }
+
+  function closeSettingsModal() {
+    document.getElementById('settingsModal').style.display = 'none';
+  }
+
+  function saveSettings() {
+    config.makesDaily = parseInt(document.getElementById('cfgMakesDaily').value, 10) || 9220;
+    config.makesNetRate = parseFloat(document.getElementById('cfgMakesRate').value) || 83;
+    config.hHourly = parseInt(document.getElementById('cfgHourlyH').value, 10) || 1370;
+    config.hNetRate = parseFloat(document.getElementById('cfgHRate').value) || 96;
+
+    localStorage.setItem('shift_config', JSON.stringify(config));
+    closeSettingsModal();
+    updateSummary();
+    alert('設定を保存しました');
   }
 
   function prevMonth() {
