@@ -33,10 +33,10 @@
 
   /* 児童扶養手当シミュレーターパネル */
   .jido-panel { background: var(--jido-bg); border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
-  .jido-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .jido-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
   .jido-title { font-size: 12px; font-weight: bold; color: var(--jido-color); display: flex; align-items: center; gap: 4px; }
-  .jido-result { font-size: 15px; font-weight: bold; color: var(--jido-color); }
-  .jido-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 4px; font-size: 10.5px; color: #4b5563; margin-top: 4px; border-top: 1px dashed #ddd6fe; padding-top: 4px; }
+  .jido-result { font-size: 14px; font-weight: bold; color: var(--jido-color); }
+  .jido-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 4px; font-size: 10px; color: #4b5563; margin-top: 4px; border-top: 1px dashed #ddd6fe; padding-top: 4px; }
 
   /* コントロールバー */
   .ctrl-bar { display: flex; justify-content: space-between; align-items: center; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -72,7 +72,7 @@
     display: flex; 
     flex-direction: column; 
     justify-content: flex-start; 
-    gap: 2px;
+    gap: 2px; 
     overflow: hidden; 
     width: 100%;
   }
@@ -92,9 +92,9 @@
     overflow: hidden; 
     text-overflow: ellipsis; 
     white-space: nowrap; 
-    line-height: 1;
-    max-width: 60%;
-    text-align: right;
+    line-height: 1; 
+    max-width: 60%; 
+    text-align: right; 
   }
 
   .badge-list { display: flex; flex-direction: column; gap: 2px; width: 100%; }
@@ -107,8 +107,8 @@
     white-space: nowrap; 
     overflow: hidden; 
     text-overflow: ellipsis; 
-    line-height: 1.2;
-    width: 100%;
+    line-height: 1.2; 
+    width: 100%; 
   }
   .badge-makes { background: var(--makes-color); }
   .badge-h { background: var(--h-color); }
@@ -156,7 +156,7 @@
     <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
   </div>
   <div class="jido-details">
-    <div id="jidoAnnualSalary">年間給与年収見込: 0円</div>
+    <div id="jidoAnnualSalary">カレンダー年間給与: 0円</div>
     <div id="jidoAnnualChildSupport">年間養育費: 0円 (算入80%)</div>
     <div id="jidoCalculatedIncome">判定所得額: 0円</div>
     <div id="jidoStatus">支給区分: 判定中</div>
@@ -268,8 +268,9 @@
     <div class="modal-header">🏛️ 児童扶養手当・所得控除設定</div>
     
     <div class="form-group">
-      <label class="form-label">養育費の月額設定 (円)</label>
-      <input type="number" id="cfgMonthlyChildSupport" class="form-input" placeholder="例: 40000">
+      <label class="form-label">養育費の年間見込額 (円)</label>
+      <input type="number" id="cfgAnnualChildSupport" class="form-input" placeholder="例: 480000 (月4万×12ヶ月)">
+      <span style="font-size:10px; color:#64748b;">※カレンダーに入力した養育費と合算、または年間総額を設定できます。</span>
     </div>
 
     <div class="form-group">
@@ -325,7 +326,7 @@
     makesNetRate: 83,
     hHourly: 1370,
     hNetRate: 96,
-    monthlyChildSupport: 40000,
+    annualChildSupport: 480000,
     childrenCount: 1,
     otherDeductions: 0
   };
@@ -347,9 +348,6 @@
     "2026-11-03": "文化の日", "2026-11-23": "勤労感謝",
     "2027-01-01": "元日", "2027-01-11": "成人の日", "2027-02-11": "建国記念", "2027-02-23": "天皇誕生日"
   };
-
-  // 1〜8月の給与総支給確定実績
-  const PAST_GROSS_SALARY_2026 = 1671928; // 1〜8月 合計総支給
 
   function persistData() {
     try {
@@ -536,7 +534,7 @@
     document.getElementById('totalNet').innerText = `${totalNet.toLocaleString()}円`;
   }
 
-  // 姶良市基準の給与所得控除計算
+  // 給与所得控除の計算（国税・自治体共通）
   function getEmploymentIncomeDeduction(gross) {
     if (gross <= 550000) return gross;
     if (gross <= 1625000) return 550000;
@@ -547,36 +545,36 @@
     return 1950000;
   }
 
-  // 姶良市基準 児童扶養手当の予測計算
+  // 1〜12月の全データを直接走査してリアルタイム集計
   function calculateJidoAllowance() {
-    // 9月〜12月の入力シフト集計
-    let futureGross = 0;
-    for (let m = 9; m <= 12; m++) {
-      const p = `${currentYear}-${String(m).padStart(2, '0')}`;
-      let mDays = 0, hHrs = 0;
-      for (const [key, val] of Object.entries(shiftData)) {
-        if (key.startsWith(p)) {
-          if (val.makes) mDays++;
-          if (val.hHours) hHrs += val.hHours;
+    let yearMakesDays = 0;
+    let yearHHourTotal = 0;
+    let calendarChildSupport = 0;
+
+    const yearPrefix = `${currentYear}-`;
+    for (const [key, val] of Object.entries(shiftData)) {
+      if (key.startsWith(yearPrefix)) {
+        if (val.makes) yearMakesDays++;
+        if (val.hHours) yearHHourTotal += val.hHours;
+        // カレンダーに養育費の記載があれば合算
+        if (val.allowance && val.allowanceNote && val.allowanceNote.includes("養育")) {
+          calendarChildSupport += val.allowance;
         }
       }
-      if (mDays === 0 && hHrs === 0) {
-        // 未入力月は平月平均（メークス20日、H社24h）で予測補完
-        mDays = 20;
-        hHrs = 24;
-      }
-      futureGross += (mDays * config.makesDaily) + (hHrs * config.hHourly);
     }
 
-    const annualGrossSalary = PAST_GROSS_SALARY_2026 + futureGross;
+    // カレンダーに入力された総支給額の合計
+    const annualGrossSalary = (yearMakesDays * config.makesDaily) + (yearHHourTotal * config.hHourly);
+    
+    // 給与所得の計算
     const employmentDeduction = getEmploymentIncomeDeduction(annualGrossSalary);
     const salaryIncome = Math.max(0, annualGrossSalary - employmentDeduction);
 
-    // 養育費（年間受取額の80%を加算）
-    const annualChildSupport = (config.monthlyChildSupport || 40000) * 12;
+    // 養育費：カレンダー入力分が設定額より多ければカレンダー優先、そうでなければ設定額
+    const annualChildSupport = Math.max(calendarChildSupport, config.annualChildSupport || 480000);
     const childSupportAdded = Math.round(annualChildSupport * 0.80);
 
-    // 判定所得額 = 給与所得 + 養育費80% - 一律控除80,000円 - 諸控除
+    // 判定所得額 = 給与所得 + 養育費80% - 一律控除80,000円 - その他控除
     const calculatedIncome = Math.max(0, salaryIncome + childSupportAdded - 80000 - (config.otherDeductions || 0));
 
     // 姶良市 基準額（扶養親族1人）
@@ -584,7 +582,7 @@
     const limitFull = 870000 + (config.childrenCount - 1) * 380000;
     const limitPartial = 2300000 + (config.childrenCount - 1) * 380000;
 
-    const baseFullAmt = 45500; // 児童1人全部支給額
+    const baseFullAmt = 45500; // 全部支給上限額
     let monthlyEstimate = 0;
     let statusText = "";
 
@@ -602,8 +600,8 @@
     }
 
     document.getElementById('jidoMonthlyEstimate').innerText = monthlyEstimate > 0 ? `${statusText}  約 ${monthlyEstimate.toLocaleString()}円 / 月` : statusText;
-    document.getElementById('jidoAnnualSalary').innerText = `年間給与見込: 約 ${Math.round(annualGrossSalary).toLocaleString()}円`;
-    document.getElementById('jidoAnnualChildSupport').innerText = `養育費(年): ${annualChildSupport.toLocaleString()}円 (算入: ${childSupportAdded.toLocaleString()}円)`;
+    document.getElementById('jidoAnnualSalary').innerText = `年間給与総額: 約 ${Math.round(annualGrossSalary).toLocaleString()}円 (${yearMakesDays}日 / ${yearHHourTotal}h)`;
+    document.getElementById('jidoAnnualChildSupport').innerText = `年間養育費: ${annualChildSupport.toLocaleString()}円 (算入: ${childSupportAdded.toLocaleString()}円)`;
     document.getElementById('jidoCalculatedIncome').innerText = `判定所得額: ${calculatedIncome.toLocaleString()}円`;
     document.getElementById('jidoStatus').innerText = `区分: ${statusText}`;
   }
@@ -633,9 +631,8 @@
     alert('設定を保存しました');
   }
 
-  // 児童扶養手当設定モーダル
   function openJidoSettingsModal() {
-    document.getElementById('cfgMonthlyChildSupport').value = config.monthlyChildSupport || 40000;
+    document.getElementById('cfgAnnualChildSupport').value = config.annualChildSupport || 480000;
     document.getElementById('cfgChildrenCount').value = config.childrenCount || 1;
     document.getElementById('cfgOtherDeductions').value = config.otherDeductions || 0;
     document.getElementById('jidoSettingsModal').style.display = 'flex';
@@ -646,7 +643,7 @@
   }
 
   function saveJidoSettings() {
-    config.monthlyChildSupport = parseInt(document.getElementById('cfgMonthlyChildSupport').value, 10) || 40000;
+    config.annualChildSupport = parseInt(document.getElementById('cfgAnnualChildSupport').value, 10) || 480000;
     config.childrenCount = parseInt(document.getElementById('cfgChildrenCount').value, 10) || 1;
     config.otherDeductions = parseInt(document.getElementById('cfgOtherDeductions').value, 10) || 0;
 
@@ -665,7 +662,7 @@
 
   function exportDataToFile() {
     const payload = {
-      version: 2,
+      version: 3,
       shiftData: shiftData,
       config: config
     };
