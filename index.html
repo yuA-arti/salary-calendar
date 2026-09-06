@@ -154,12 +154,12 @@
 <!-- 児童扶養手当シミュレーターパネル -->
 <div class="jido-panel">
   <div class="jido-header">
-    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 子ども1人)</span>
+    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / カレンダー連動)</span>
     <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
   </div>
   <div class="jido-details">
-    <div id="jidoAnnualSalary">カレンダー年間給与: 0円</div>
-    <div id="jidoAnnualChildSupport">年間養育費: 0円 (算入80%)</div>
+    <div id="jidoAnnualSalary">カレンダー給与総額: 0円</div>
+    <div id="jidoAnnualChildSupport">カレンダー養育費: 0円 (算入80%)</div>
     <div id="jidoCalculatedIncome">判定所得額: 0円</div>
     <div id="jidoStatus">支給区分: 判定中</div>
   </div>
@@ -175,8 +175,7 @@
   <div style="display:flex; gap:4px; flex-wrap: wrap;">
     <button class="btn" onclick="autoFillWeekdays()">⚡ 平日メークス</button>
     <button class="btn btn-h" onclick="autoFillWeekendsH()">⚡ 土日H社一括</button>
-    <button class="btn" onclick="openSettingsModal()">⚙ 単価</button>
-    <button class="btn" onclick="openJidoSettingsModal()">🏛️ 手当設定</button>
+    <button class="btn" onclick="openSettingsModal()">⚙ 単価設定</button>
     <button class="btn" onclick="openDataModal()">💾 保存/復元</button>
   </div>
 </div>
@@ -215,7 +214,7 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">手当の名称（任意）</label>
+      <label class="form-label">手当の名称（「養育費」を含むと自動で扶養手当計算に算入）</label>
       <input type="text" id="allowanceNote" class="form-input" placeholder="例: 養育費、児童手当">
     </div>
 
@@ -263,37 +262,14 @@
       <input type="number" id="cfgHDefaultHours" class="form-input" placeholder="例: 3" step="0.5">
     </div>
 
-    <div class="modal-actions">
-      <button class="btn" onclick="closeSettingsModal()">キャンセル</button>
-      <button class="btn btn-primary" onclick="saveSettings()">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- 児童扶養手当設定モーダル -->
-<div class="modal" id="jidoSettingsModal">
-  <div class="modal-content">
-    <div class="modal-header">🏛️ 児童扶養手当・所得控除設定</div>
-    
-    <div class="form-group">
-      <label class="form-label">養育費の年間見込額 (円)</label>
-      <input type="number" id="cfgAnnualChildSupport" class="form-input" placeholder="例: 480000 (月4万×12ヶ月)">
-      <span style="font-size:10px; color:#64748b;">※カレンダーに入力した養育費と合算、または年間総額を設定できます。</span>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">扶養親族等の人数（子どもの人数）</label>
+    <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:8px;">
+      <label class="form-label">児童扶養手当 扶養親族等の人数（子どもの人数）</label>
       <input type="number" id="cfgChildrenCount" class="form-input" min="1" max="5" value="1">
     </div>
 
-    <div class="form-group">
-      <label class="form-label">その他控除（医療費控除や小規模共済等があれば年額入力）</label>
-      <input type="number" id="cfgOtherDeductions" class="form-input" placeholder="通常は0でOK" value="0">
-    </div>
-
     <div class="modal-actions">
-      <button class="btn" onclick="closeJidoSettingsModal()">キャンセル</button>
-      <button class="btn btn-primary" onclick="saveJidoSettings()">保存</button>
+      <button class="btn" onclick="closeSettingsModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSettings()">保存</button>
     </div>
   </div>
 </div>
@@ -335,9 +311,7 @@
     hHourly: 1370,
     hNetRate: 96,
     hDefaultHours: 3,
-    annualChildSupport: 480000,
-    childrenCount: 1,
-    otherDeductions: 0
+    childrenCount: 1
   };
 
   try {
@@ -497,7 +471,6 @@
     calculateJidoAllowance();
   }
 
-  // 平日（祝日除く）メークス一括入力
   function autoFillWeekdays() {
     if (!confirm(`${currentMonth + 1}月の平日（祝日を除く月〜金）にメークス出勤を一括入力しますか？`)) return;
 
@@ -518,7 +491,6 @@
     calculateJidoAllowance();
   }
 
-  // 土日 H社一括入力ボタン
   function autoFillWeekendsH() {
     const defaultHours = config.hDefaultHours || 3;
     if (!confirm(`${currentMonth + 1}月のすべての「土曜日・日曜日」に H社（${defaultHours}時間）を一括入力しますか？`)) return;
@@ -528,7 +500,6 @@
       const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
 
-      // 土曜(6) または 日曜(0)
       if (dayOfWeek === 6 || dayOfWeek === 0) {
         if (!shiftData[dateKey]) shiftData[dateKey] = {};
         shiftData[dateKey].hHours = defaultHours;
@@ -576,42 +547,52 @@
     return 1950000;
   }
 
+  // カレンダーに入力された数字だけを直接走査して児童扶養手当を計算
   function calculateJidoAllowance() {
-    let yearMakesDays = 0;
-    let yearHHourTotal = 0;
-    let calendarChildSupport = 0;
+    let totalMakesDays = 0;
+    let totalHHour = 0;
+    let totalChildSupport = 0;
 
     const yearPrefix = `${currentYear}-`;
     for (const [key, val] of Object.entries(shiftData)) {
       if (key.startsWith(yearPrefix)) {
-        if (val.makes) yearMakesDays++;
-        if (val.hHours) yearHHourTotal += val.hHours;
-        if (val.allowance && val.allowanceNote && val.allowanceNote.includes("養育")) {
-          calendarChildSupport += val.allowance;
+        if (val.makes) totalMakesDays++;
+        if (val.hHours) totalHHour += val.hHours;
+        if (val.allowance && val.allowanceNote && (val.allowanceNote.includes("養育") || val.allowanceNote.includes("養育費"))) {
+          totalChildSupport += val.allowance;
         }
       }
     }
 
-    const annualGrossSalary = (yearMakesDays * config.makesDaily) + (yearHHourTotal * config.hHourly);
+    // カレンダー入力分のみの給与総支給額
+    const annualGrossSalary = (totalMakesDays * config.makesDaily) + (totalHHour * config.hHourly);
+    
+    // 給与所得
     const employmentDeduction = getEmploymentIncomeDeduction(annualGrossSalary);
     const salaryIncome = Math.max(0, annualGrossSalary - employmentDeduction);
 
-    const annualChildSupport = Math.max(calendarChildSupport, config.annualChildSupport || 480000);
-    const childSupportAdded = Math.round(annualChildSupport * 0.80);
+    // 養育費の80%算入
+    const childSupportAdded = Math.round(totalChildSupport * 0.80);
 
-    const calculatedIncome = Math.max(0, salaryIncome + childSupportAdded - 80000 - (config.otherDeductions || 0));
+    // 判定所得額 = 給与所得 + 養育費80% - 一律控除80,000円
+    const calculatedIncome = Math.max(0, salaryIncome + childSupportAdded - 80000);
 
-    const limitFull = 870000 + (config.childrenCount - 1) * 380000;
-    const limitPartial = 2300000 + (config.childrenCount - 1) * 380000;
+    // 姶良市 限度額（扶養親族1人）
+    const limitFull = 870000 + ((config.childrenCount || 1) - 1) * 380000;
+    const limitPartial = 2300000 + ((config.childrenCount || 1) - 1) * 380000;
 
     const baseFullAmt = 45500;
     let monthlyEstimate = 0;
     let statusText = "";
 
-    if (calculatedIncome <= limitFull) {
+    if (annualGrossSalary === 0 && totalChildSupport === 0) {
+      monthlyEstimate = 0;
+      statusText = "カレンダー未入力";
+    } else if (calculatedIncome <= limitFull) {
       monthlyEstimate = baseFullAmt;
       statusText = "全部支給";
     } else if (calculatedIncome < limitPartial) {
+      // 一部支給計算式: 45,490円 - (判定所得 - 全部支給限度額) × 0.0243007
       const deductionFromFull = (calculatedIncome - limitFull) * 0.0243007;
       monthlyEstimate = Math.max(10740, Math.round((45490 - deductionFromFull) / 10) * 10);
       statusText = "一部支給";
@@ -621,10 +602,10 @@
     }
 
     document.getElementById('jidoMonthlyEstimate').innerText = monthlyEstimate > 0 ? `${statusText}  約 ${monthlyEstimate.toLocaleString()}円 / 月` : statusText;
-    document.getElementById('jidoAnnualSalary').innerText = `年間給与総額: 約 ${Math.round(annualGrossSalary).toLocaleString()}円 (${yearMakesDays}日 / ${yearHHourTotal}h)`;
-    document.getElementById('jidoAnnualChildSupport').innerText = `年間養育費: ${annualChildSupport.toLocaleString()}円 (算入: ${childSupportAdded.toLocaleString()}円)`;
+    document.getElementById('jidoAnnualSalary').innerText = `カレンダー給与総額: ${Math.round(annualGrossSalary).toLocaleString()}円 (${totalMakesDays}日 / ${totalHHour}h)`;
+    document.getElementById('jidoAnnualChildSupport').innerText = `カレンダー養育費: ${totalChildSupport.toLocaleString()}円 (算入80%: ${childSupportAdded.toLocaleString()}円)`;
     document.getElementById('jidoCalculatedIncome').innerText = `判定所得額: ${calculatedIncome.toLocaleString()}円`;
-    document.getElementById('jidoStatus').innerText = `区分: ${statusText}`;
+    document.getElementById('jidoStatus').innerText = `支給区分: ${statusText}`;
   }
 
   function openSettingsModal() {
@@ -633,6 +614,7 @@
     document.getElementById('cfgHourlyH').value = config.hHourly;
     document.getElementById('cfgHRate').value = config.hNetRate;
     document.getElementById('cfgHDefaultHours').value = config.hDefaultHours || 3;
+    document.getElementById('cfgChildrenCount').value = config.childrenCount || 1;
     document.getElementById('settingsModal').style.display = 'flex';
   }
 
@@ -646,34 +628,13 @@
     config.hHourly = parseInt(document.getElementById('cfgHourlyH').value, 10) || 1370;
     config.hNetRate = parseFloat(document.getElementById('cfgHRate').value) || 96;
     config.hDefaultHours = parseFloat(document.getElementById('cfgHDefaultHours').value) || 3;
+    config.childrenCount = parseInt(document.getElementById('cfgChildrenCount').value, 10) || 1;
 
     persistData();
     closeSettingsModal();
     updateSummary();
     calculateJidoAllowance();
     alert('設定を保存しました');
-  }
-
-  function openJidoSettingsModal() {
-    document.getElementById('cfgAnnualChildSupport').value = config.annualChildSupport || 480000;
-    document.getElementById('cfgChildrenCount').value = config.childrenCount || 1;
-    document.getElementById('cfgOtherDeductions').value = config.otherDeductions || 0;
-    document.getElementById('jidoSettingsModal').style.display = 'flex';
-  }
-
-  function closeJidoSettingsModal() {
-    document.getElementById('jidoSettingsModal').style.display = 'none';
-  }
-
-  function saveJidoSettings() {
-    config.annualChildSupport = parseInt(document.getElementById('cfgAnnualChildSupport').value, 10) || 480000;
-    config.childrenCount = parseInt(document.getElementById('cfgChildrenCount').value, 10) || 1;
-    config.otherDeductions = parseInt(document.getElementById('cfgOtherDeductions').value, 10) || 0;
-
-    persistData();
-    closeJidoSettingsModal();
-    calculateJidoAllowance();
-    alert('手当設定を更新しました');
   }
 
   function openDataModal() {
@@ -685,7 +646,7 @@
 
   function exportDataToFile() {
     const payload = {
-      version: 4,
+      version: 6,
       shiftData: shiftData,
       config: config
     };
