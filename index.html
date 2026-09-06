@@ -46,6 +46,8 @@
   .btn:hover { background: var(--primary-light); border-color: var(--primary); }
   .btn-primary { background: var(--primary); color: #fff; border: none; }
   .btn-primary:hover { background: #1d4ed8; color: #fff; }
+  .btn-h { border-color: #a7f3d0; background: #ecfdf5; color: #065f46; }
+  .btn-h:hover { background: #d1fae5; border-color: var(--h-color); }
 
   /* カレンダーグリッド */
   .calendar-grid { 
@@ -171,7 +173,8 @@
     <button class="btn" onclick="nextMonth()">▶</button>
   </div>
   <div style="display:flex; gap:4px; flex-wrap: wrap;">
-    <button class="btn" onclick="autoFillWeekdays()">⚡ 平日一括</button>
+    <button class="btn" onclick="autoFillWeekdays()">⚡ 平日メークス</button>
+    <button class="btn btn-h" onclick="autoFillWeekendsH()">⚡ 土日H社一括</button>
     <button class="btn" onclick="openSettingsModal()">⚙ 単価</button>
     <button class="btn" onclick="openJidoSettingsModal()">🏛️ 手当設定</button>
     <button class="btn" onclick="openDataModal()">💾 保存/復元</button>
@@ -255,6 +258,11 @@
       <input type="number" id="cfgHRate" class="form-input" placeholder="例: 96">
     </div>
 
+    <div class="form-group">
+      <label class="form-label">H社 土日一括入力の基本時間（時間）</label>
+      <input type="number" id="cfgHDefaultHours" class="form-input" placeholder="例: 3" step="0.5">
+    </div>
+
     <div class="modal-actions">
       <button class="btn" onclick="closeSettingsModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveSettings()">保存</button>
@@ -326,6 +334,7 @@
     makesNetRate: 83,
     hHourly: 1370,
     hNetRate: 96,
+    hDefaultHours: 3,
     annualChildSupport: 480000,
     childrenCount: 1,
     otherDeductions: 0
@@ -488,6 +497,7 @@
     calculateJidoAllowance();
   }
 
+  // 平日（祝日除く）メークス一括入力
   function autoFillWeekdays() {
     if (!confirm(`${currentMonth + 1}月の平日（祝日を除く月〜金）にメークス出勤を一括入力しますか？`)) return;
 
@@ -500,6 +510,28 @@
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isHoliday) {
         if (!shiftData[dateKey]) shiftData[dateKey] = {};
         shiftData[dateKey].makes = true;
+      }
+    }
+    persistData();
+    renderCalendar();
+    updateSummary();
+    calculateJidoAllowance();
+  }
+
+  // 土日 H社一括入力ボタン
+  function autoFillWeekendsH() {
+    const defaultHours = config.hDefaultHours || 3;
+    if (!confirm(`${currentMonth + 1}月のすべての「土曜日・日曜日」に H社（${defaultHours}時間）を一括入力しますか？`)) return;
+
+    const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+    for (let d = 1; d <= lastDate; d++) {
+      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
+
+      // 土曜(6) または 日曜(0)
+      if (dayOfWeek === 6 || dayOfWeek === 0) {
+        if (!shiftData[dateKey]) shiftData[dateKey] = {};
+        shiftData[dateKey].hHours = defaultHours;
       }
     }
     persistData();
@@ -534,7 +566,6 @@
     document.getElementById('totalNet').innerText = `${totalNet.toLocaleString()}円`;
   }
 
-  // 給与所得控除の計算（国税・自治体共通）
   function getEmploymentIncomeDeduction(gross) {
     if (gross <= 550000) return gross;
     if (gross <= 1625000) return 550000;
@@ -545,7 +576,6 @@
     return 1950000;
   }
 
-  // 1〜12月の全データを直接走査してリアルタイム集計
   function calculateJidoAllowance() {
     let yearMakesDays = 0;
     let yearHHourTotal = 0;
@@ -556,33 +586,25 @@
       if (key.startsWith(yearPrefix)) {
         if (val.makes) yearMakesDays++;
         if (val.hHours) yearHHourTotal += val.hHours;
-        // カレンダーに養育費の記載があれば合算
         if (val.allowance && val.allowanceNote && val.allowanceNote.includes("養育")) {
           calendarChildSupport += val.allowance;
         }
       }
     }
 
-    // カレンダーに入力された総支給額の合計
     const annualGrossSalary = (yearMakesDays * config.makesDaily) + (yearHHourTotal * config.hHourly);
-    
-    // 給与所得の計算
     const employmentDeduction = getEmploymentIncomeDeduction(annualGrossSalary);
     const salaryIncome = Math.max(0, annualGrossSalary - employmentDeduction);
 
-    // 養育費：カレンダー入力分が設定額より多ければカレンダー優先、そうでなければ設定額
     const annualChildSupport = Math.max(calendarChildSupport, config.annualChildSupport || 480000);
     const childSupportAdded = Math.round(annualChildSupport * 0.80);
 
-    // 判定所得額 = 給与所得 + 養育費80% - 一律控除80,000円 - その他控除
     const calculatedIncome = Math.max(0, salaryIncome + childSupportAdded - 80000 - (config.otherDeductions || 0));
 
-    // 姶良市 基準額（扶養親族1人）
-    // 全部支給限度額: 870,000円 / 一部支給限度額: 2,300,000円
     const limitFull = 870000 + (config.childrenCount - 1) * 380000;
     const limitPartial = 2300000 + (config.childrenCount - 1) * 380000;
 
-    const baseFullAmt = 45500; // 全部支給上限額
+    const baseFullAmt = 45500;
     let monthlyEstimate = 0;
     let statusText = "";
 
@@ -590,7 +612,6 @@
       monthlyEstimate = baseFullAmt;
       statusText = "全部支給";
     } else if (calculatedIncome < limitPartial) {
-      // 一部支給計算式: 45,490円 - (判定所得 - 全部支給限度額) × 0.0243007
       const deductionFromFull = (calculatedIncome - limitFull) * 0.0243007;
       monthlyEstimate = Math.max(10740, Math.round((45490 - deductionFromFull) / 10) * 10);
       statusText = "一部支給";
@@ -611,6 +632,7 @@
     document.getElementById('cfgMakesRate').value = config.makesNetRate;
     document.getElementById('cfgHourlyH').value = config.hHourly;
     document.getElementById('cfgHRate').value = config.hNetRate;
+    document.getElementById('cfgHDefaultHours').value = config.hDefaultHours || 3;
     document.getElementById('settingsModal').style.display = 'flex';
   }
 
@@ -623,6 +645,7 @@
     config.makesNetRate = parseFloat(document.getElementById('cfgMakesRate').value) || 83;
     config.hHourly = parseInt(document.getElementById('cfgHourlyH').value, 10) || 1370;
     config.hNetRate = parseFloat(document.getElementById('cfgHRate').value) || 96;
+    config.hDefaultHours = parseFloat(document.getElementById('cfgHDefaultHours').value) || 3;
 
     persistData();
     closeSettingsModal();
@@ -662,7 +685,7 @@
 
   function exportDataToFile() {
     const payload = {
-      version: 3,
+      version: 4,
       shiftData: shiftData,
       config: config
     };
