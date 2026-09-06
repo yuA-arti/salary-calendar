@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>シフト・給与自動計算 & 児童扶養手当予測カレンダー</title>
+<title>シフト・給与管理 & 児童扶養手当予測</title>
 <style>
   :root {
     --primary: #2563eb;
@@ -23,6 +23,15 @@
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { background: var(--bg); color: var(--text); padding: 8px; max-width: 950px; margin: 0 auto; overflow-x: hidden; }
   
+  /* ナビゲーションタブ */
+  .nav-tabs { display: flex; gap: 6px; margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 4px; }
+  .tab-btn { padding: 8px 14px; border: none; background: transparent; font-size: 13px; font-weight: bold; color: #64748b; cursor: pointer; border-radius: 6px 6px 0 0; }
+  .tab-btn.active { color: var(--primary); background: var(--primary-light); border-bottom: 2px solid var(--primary); }
+
+  /* 画面切り替えコンテナ */
+  .page-view { display: none; }
+  .page-view.active { display: block; }
+
   /* サマリーカード */
   .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin-bottom: 8px; }
   .card { background: var(--card); padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; }
@@ -31,7 +40,7 @@
   .card-sub { font-size: 9.5px; color: #64748b; margin-top: 2px; font-weight: normal; }
   .total-val { color: var(--primary); font-size: 18px; }
 
-  /* 児童扶養手当シミュレーターパネル */
+  /* 児童扶養手当パネル */
   .jido-panel { background: var(--jido-bg); border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
   .jido-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
   .jido-title { font-size: 12px; font-weight: bold; color: var(--jido-color); display: flex; align-items: center; gap: 4px; }
@@ -47,79 +56,38 @@
   .btn-primary { background: var(--primary); color: #fff; border: none; }
   .btn-primary:hover { background: #1d4ed8; color: #fff; }
   .btn-h { border-color: #a7f3d0; background: #ecfdf5; color: #065f46; }
-  .btn-h:hover { background: #d1fae5; border-color: var(--h-color); }
 
   /* カレンダーグリッド */
-  .calendar-grid { 
-    display: grid; 
-    grid-template-columns: repeat(7, minmax(0, 1fr)); 
-    gap: 3px; 
-    background: var(--card); 
-    padding: 6px; 
-    border-radius: 10px; 
-    border: 1px solid var(--border); 
-    width: 100%;
-  }
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; background: var(--card); padding: 6px; border-radius: 10px; border: 1px solid var(--border); width: 100%; }
   .day-name { text-align: center; font-size: 11px; font-weight: bold; padding: 4px 0; color: #64748b; }
   .day-name.sat { color: #3b82f6; }
   .day-name.sun { color: #ef4444; }
-  
-  .day-cell { 
-    min-height: 72px; 
-    border: 1px solid var(--border); 
-    border-radius: 6px; 
-    padding: 3px 2px; 
-    cursor: pointer; 
-    background: #fff; 
-    display: flex; 
-    flex-direction: column; 
-    justify-content: flex-start; 
-    gap: 2px; 
-    overflow: hidden; 
-    width: 100%;
-  }
+  .day-cell { min-height: 72px; border: 1px solid var(--border); border-radius: 6px; padding: 3px 2px; cursor: pointer; background: #fff; display: flex; flex-direction: column; justify-content: flex-start; gap: 2px; overflow: hidden; width: 100%; }
   .day-cell:hover { border-color: var(--primary); }
   .day-cell.empty { background: #f8fafc; border: none; cursor: default; }
   .day-cell.holiday { background: var(--holiday-bg); }
-  
   .day-top { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 1px; }
   .day-num { font-size: 11px; font-weight: bold; line-height: 1; }
   .day-cell.sat .day-num { color: #3b82f6; }
   .day-cell.sun .day-num, .day-cell.holiday .day-num { color: #ef4444; }
-  
-  .holiday-tag { 
-    font-size: 8px; 
-    color: #ef4444; 
-    font-weight: normal; 
-    overflow: hidden; 
-    text-overflow: ellipsis; 
-    white-space: nowrap; 
-    line-height: 1; 
-    max-width: 60%; 
-    text-align: right; 
-  }
+  .holiday-tag { font-size: 8px; color: #ef4444; font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
 
   .badge-list { display: flex; flex-direction: column; gap: 2px; width: 100%; }
-  .badge { 
-    font-size: 9px; 
-    padding: 1px 3px; 
-    border-radius: 3px; 
-    color: #fff; 
-    font-weight: 500; 
-    white-space: nowrap; 
-    overflow: hidden; 
-    text-overflow: ellipsis; 
-    line-height: 1.2; 
-    width: 100%; 
-  }
+  .badge { font-size: 9px; padding: 1px 3px; border-radius: 3px; color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; width: 100%; }
   .badge-makes { background: var(--makes-color); }
   .badge-h { background: var(--h-color); }
   .badge-allowance { background: var(--allowance-color); }
   .badge-event { background: var(--event-color); }
 
+  /* 明細管理テーブル */
+  .table-box { background: #fff; border-radius: 10px; border: 1px solid var(--border); overflow-x: auto; margin-top: 10px; }
+  table.payslip-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+  table.payslip-table th, table.payslip-table td { padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.payslip-table th { background: #f8fafc; color: #64748b; font-weight: 600; }
+
   /* モーダル */
   .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 100; padding: 12px; }
-  .modal-content { background: #fff; border-radius: 14px; padding: 16px; width: 100%; max-width: 380px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
+  .modal-content { background: #fff; border-radius: 14px; padding: 16px; width: 100%; max-width: 420px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
   .modal-header { font-size: 15px; font-weight: bold; margin-bottom: 12px; }
   .form-group { margin-bottom: 10px; }
   .form-label { display: block; font-size: 11px; color: #64748b; margin-bottom: 3px; font-weight: 500; }
@@ -130,101 +98,141 @@
 </head>
 <body>
 
-<!-- サマリー -->
-<div class="dashboard">
-  <div class="card">
-    <div class="card-title">当月 実入金手取り</div>
-    <div class="card-val total-val" id="totalNet">0円</div>
+<!-- タブ切り替え -->
+<div class="nav-tabs">
+  <button class="tab-btn active" id="tabBtnCal" onclick="switchTab('cal')">📅 カレンダー & 扶養手当予測</button>
+  <button class="tab-btn" id="tabBtnPayslip" onclick="switchTab('payslip')">📑 確定給与明細 内訳管理</button>
+</div>
+
+<!-- ================= 画面1: カレンダー ================= -->
+<div class="page-view active" id="viewCalendar">
+  <div class="dashboard">
+    <div class="card">
+      <div class="card-title">当月 実入金手取り</div>
+      <div class="card-val total-val" id="totalNet">0円</div>
+    </div>
+    <div class="card">
+      <div class="card-title">メークス手取り</div>
+      <div class="card-val" id="makesNet">0円</div>
+      <div class="card-sub" id="makesGross">総支給: 0円</div>
+    </div>
+    <div class="card">
+      <div class="card-title">H社手取り</div>
+      <div class="card-val" id="hNet">0円</div>
+    </div>
+    <div class="card">
+      <div class="card-title">手当・養育費</div>
+      <div class="card-val" id="allowanceTotal">0円</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-title">メークス手取り</div>
-    <div class="card-val" id="makesNet">0円</div>
-    <div class="card-sub" id="makesGross">総支給: 0円</div>
+
+  <div class="jido-panel">
+    <div class="jido-header">
+      <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / カレンダー連動)</span>
+      <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
+    </div>
+    <div class="jido-details">
+      <div id="jidoAnnualSalary">カレンダー給与総額: 0円</div>
+      <div id="jidoAnnualChildSupport">カレンダー養育費: 0円 (算入80%)</div>
+      <div id="jidoCalculatedIncome">判定所得額: 0円</div>
+      <div id="jidoStatus">支給区分: 判定中</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-title">H社手取り</div>
-    <div class="card-val" id="hNet">0円</div>
+
+  <div class="ctrl-bar">
+    <div class="month-nav">
+      <button class="btn" onclick="prevMonth()">◀</button>
+      <div class="cal-title" id="monthTitle">2026年 9月</div>
+      <button class="btn" onclick="nextMonth()">▶</button>
+    </div>
+    <div style="display:flex; gap:4px; flex-wrap: wrap;">
+      <button class="btn" onclick="autoFillWeekdays()">⚡ 平日メークス</button>
+      <button class="btn btn-h" onclick="autoFillWeekendsH()">⚡ 土日H社一括</button>
+      <button class="btn" onclick="openSettingsModal()">⚙ 単価設定</button>
+      <button class="btn" onclick="openDataModal()">💾 保存/復元</button>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-title">手当・養育費</div>
-    <div class="card-val" id="allowanceTotal">0円</div>
+
+  <div class="calendar-grid" id="calendar">
+    <div class="day-name">月</div><div class="day-name">火</div><div class="day-name">水</div>
+    <div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>
   </div>
 </div>
 
-<!-- 児童扶養手当シミュレーターパネル -->
-<div class="jido-panel">
-  <div class="jido-header">
-    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / カレンダー連動)</span>
-    <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
+<!-- ================= 画面2: 給与明細アップロード・内訳管理 ================= -->
+<div class="page-view" id="viewPayslip">
+  <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <h3 style="font-size: 14px;">確定給与明細一覧・画像保存</h3>
+    <button class="btn btn-primary" onclick="openPayslipModal()">＋ 給与明細を追加・アップロード</button>
   </div>
-  <div class="jido-details">
-    <div id="jidoAnnualSalary">カレンダー給与総額: 0円</div>
-    <div id="jidoAnnualChildSupport">カレンダー養育費: 0円 (算入80%)</div>
-    <div id="jidoCalculatedIncome">判定所得額: 0円</div>
-    <div id="jidoStatus">支給区分: 判定中</div>
-  </div>
-</div>
 
-<!-- コントロールバー -->
-<div class="ctrl-bar">
-  <div class="month-nav">
-    <button class="btn" onclick="prevMonth()">◀</button>
-    <div class="cal-title" id="monthTitle">2026年 9月</div>
-    <button class="btn" onclick="nextMonth()">▶</button>
+  <div class="dashboard">
+    <div class="card">
+      <div class="card-title">登録総支給 累計</div>
+      <div class="card-val" id="payslipTotalGross">0円</div>
+    </div>
+    <div class="card">
+      <div class="card-title">控除 累計</div>
+      <div class="card-val" id="payslipTotalDeduct">0円</div>
+    </div>
+    <div class="card">
+      <div class="card-title">手取り 累計</div>
+      <div class="card-val total-val" id="payslipTotalNet">0円</div>
+    </div>
   </div>
-  <div style="display:flex; gap:4px; flex-wrap: wrap;">
-    <button class="btn" onclick="autoFillWeekdays()">⚡ 平日メークス</button>
-    <button class="btn btn-h" onclick="autoFillWeekendsH()">⚡ 土日H社一括</button>
-    <button class="btn" onclick="openSettingsModal()">⚙ 単価設定</button>
-    <button class="btn" onclick="openDataModal()">💾 保存/復元</button>
-  </div>
-</div>
 
-<!-- カレンダー枠 -->
-<div class="calendar-grid" id="calendar">
-  <div class="day-name">月</div><div class="day-name">火</div><div class="day-name">水</div>
-  <div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>
+  <div class="table-box">
+    <table class="payslip-table">
+      <thead>
+        <tr>
+          <th>対象月</th>
+          <th>会社</th>
+          <th>総支給額</th>
+          <th>控除合計</th>
+          <th>手取り</th>
+          <th>明細書</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="payslipTableBody">
+        <!-- JSで明細データを挿入 -->
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <!-- 日付設定モーダル -->
 <div class="modal" id="modal">
   <div class="modal-content">
     <div class="modal-header" id="modalDateTitle">日付設定</div>
-    
     <div class="form-group" style="background:#f1f5f9; padding:8px; border-radius:6px;">
       <label class="checkbox-label" style="font-weight:600;">
         <input type="checkbox" id="mCheck" style="width:16px;height:16px;">
         メークス出勤 (日給+交通費)
       </label>
     </div>
-
     <div class="form-group">
       <label class="form-label">H社 稼働時間 (時間入力)</label>
       <input type="number" id="hHours" class="form-input" placeholder="例: 3" min="0" step="0.5">
     </div>
-
     <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:8px;">
       <label class="form-label" style="color:var(--event-color);">大切な予定・メモ（重複防止）</label>
       <input type="text" id="eventNote" class="form-input" placeholder="例: 参観日、通院">
     </div>
-
     <div class="form-group">
       <label class="form-label">手当・養育費・その他入金額 (円)</label>
       <input type="number" id="allowanceAmt" class="form-input" placeholder="例: 40000" min="0" step="1000">
     </div>
-
     <div class="form-group">
       <label class="form-label">手当の名称（「養育費」を含むと自動で扶養手当計算に算入）</label>
       <input type="text" id="allowanceNote" class="form-input" placeholder="例: 養育費、児童手当">
     </div>
-
     <div class="form-group">
       <label class="checkbox-label" style="font-size:12px; color:#ef4444;">
         <input type="checkbox" id="isHolidayCheck">
         この日を祝日として扱う (背景薄赤)
       </label>
     </div>
-
     <div class="modal-actions">
       <button class="btn" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveDayData()">保存</button>
@@ -236,40 +244,73 @@
 <div class="modal" id="settingsModal">
   <div class="modal-content">
     <div class="modal-header">⚙ 給与・時給単価設定</div>
-    
     <div class="form-group">
       <label class="form-label">メークス 1日総支給額（時給7h＋交通費）</label>
       <input type="number" id="cfgMakesDaily" class="form-input">
     </div>
-
     <div class="form-group">
       <label class="form-label">メークス 手取り率（%）</label>
       <input type="number" id="cfgMakesRate" class="form-input" placeholder="例: 83">
     </div>
-
     <div class="form-group">
       <label class="form-label">H社 時給（円）</label>
       <input type="number" id="cfgHourlyH" class="form-input">
     </div>
-
     <div class="form-group">
       <label class="form-label">H社 手取り率（%）</label>
       <input type="number" id="cfgHRate" class="form-input" placeholder="例: 96">
     </div>
-
     <div class="form-group">
       <label class="form-label">H社 土日一括入力の基本時間（時間）</label>
       <input type="number" id="cfgHDefaultHours" class="form-input" placeholder="例: 3" step="0.5">
     </div>
-
     <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:8px;">
       <label class="form-label">児童扶養手当 扶養親族等の人数（子どもの人数）</label>
       <input type="number" id="cfgChildrenCount" class="form-input" min="1" max="5" value="1">
     </div>
-
     <div class="modal-actions">
       <button class="btn" onclick="closeSettingsModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 給与明細アップロードモーダル -->
+<div class="modal" id="payslipModal">
+  <div class="modal-content">
+    <div class="modal-header">📑 給与明細の追加・アップロード</div>
+    <div class="form-group">
+      <label class="form-label">対象年月</label>
+      <input type="month" id="psMonth" class="form-input" value="2026-08">
+    </div>
+    <div class="form-group">
+      <label class="form-label">会社名</label>
+      <select id="psCompany" class="form-input">
+        <option value="メークス株式会社">メークス株式会社</option>
+        <option value="H社">H社</option>
+        <option value="その他">その他</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">総支給額 (円)</label>
+      <input type="number" id="psGross" class="form-input" placeholder="例: 207578">
+    </div>
+    <div class="form-group">
+      <label class="form-label">控除合計額 (円)</label>
+      <input type="number" id="psDeduct" class="form-input" placeholder="例: 32041">
+    </div>
+    <div class="form-group">
+      <label class="form-label">差引支給額（手取り額 / 円）</label>
+      <input type="number" id="psNet" class="form-input" placeholder="例: 175537">
+    </div>
+    <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:8px;">
+      <label class="form-label">明細書の画像・PDFを添付</label>
+      <input type="file" id="psFile" class="form-input" accept="image/*,application/pdf">
+      <span style="font-size:10px; color:#64748b;">※スマホで撮影した明細画像も直接添付できます。</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closePayslipModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="savePayslip()">登録</button>
     </div>
   </div>
 </div>
@@ -278,17 +319,13 @@
 <div class="modal" id="dataModal">
   <div class="modal-content">
     <div class="modal-header">💾 データのバックアップと復元</div>
-    <p style="font-size: 11px; color: #64748b; margin-bottom: 12px;">ホーム画面追加時や機種変更時にデータが消えるのを防ぐため、バックアップをファイル保存できます。</p>
-
     <div class="form-group">
       <button class="btn btn-primary" style="width:100%; margin-bottom:8px;" onclick="exportDataToFile()">📥 データをファイルに書き出す (保存)</button>
     </div>
-
     <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:12px;">
       <label class="form-label">📤 バックアップファイルから復元</label>
       <input type="file" id="importFileInput" class="form-input" accept=".json" onchange="importDataFromFile(event)">
     </div>
-
     <div class="modal-actions">
       <button class="btn" onclick="closeDataModal()">閉じる</button>
     </div>
@@ -297,7 +334,7 @@
 
 <script>
   let currentYear = 2026;
-  let currentMonth = 8; // 9月 (0-indexed)
+  let currentMonth = 8;
   let selectedDateKey = null;
 
   if (navigator.storage && navigator.storage.persist) {
@@ -305,6 +342,7 @@
   }
 
   let shiftData = {};
+  let payslips = [];
   let config = {
     makesDaily: 9220,
     makesNetRate: 83,
@@ -319,6 +357,8 @@
     if (loadedData) shiftData = JSON.parse(loadedData);
     const loadedCfg = localStorage.getItem('shift_config');
     if (loadedCfg) config = Object.assign(config, JSON.parse(loadedCfg));
+    const loadedPs = localStorage.getItem('shift_payslips');
+    if (loadedPs) payslips = JSON.parse(loadedPs);
   } catch(e) {
     console.warn("Storage loading error", e);
   }
@@ -336,8 +376,22 @@
     try {
       localStorage.setItem('shift_data', JSON.stringify(shiftData));
       localStorage.setItem('shift_config', JSON.stringify(config));
+      localStorage.setItem('shift_payslips', JSON.stringify(payslips));
     } catch(e) {
       alert("保存領域へのアクセスに失敗しました。");
+    }
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
+    if (tab === 'cal') {
+      document.getElementById('tabBtnCal').classList.add('active');
+      document.getElementById('viewCalendar').classList.add('active');
+    } else {
+      document.getElementById('tabBtnPayslip').classList.add('active');
+      document.getElementById('viewPayslip').classList.add('active');
+      renderPayslips();
     }
   }
 
@@ -345,12 +399,12 @@
     renderCalendar();
     updateSummary();
     calculateJidoAllowance();
+    renderPayslips();
   }
 
   function renderCalendar() {
     document.getElementById('monthTitle').innerText = `${currentYear}年 ${currentMonth + 1}月`;
     const cal = document.getElementById('calendar');
-    
     const cells = cal.querySelectorAll('.day-cell');
     cells.forEach(c => c.remove());
 
@@ -434,7 +488,6 @@
   function openModal(dateKey, day, isAutoHoliday) {
     selectedDateKey = dateKey;
     document.getElementById('modalDateTitle').innerText = `${currentMonth + 1}月 ${day}日の設定`;
-    
     const data = shiftData[dateKey] || {};
     document.getElementById('mCheck').checked = !!data.makes;
     document.getElementById('hHours').value = data.hHours || '';
@@ -442,13 +495,10 @@
     document.getElementById('allowanceAmt').value = data.allowance || '';
     document.getElementById('allowanceNote').value = data.allowanceNote || '';
     document.getElementById('isHolidayCheck').checked = data.isHoliday !== undefined ? data.isHoliday : isAutoHoliday;
-    
     document.getElementById('modal').style.display = 'flex';
   }
 
-  function closeModal() {
-    document.getElementById('modal').style.display = 'none';
-  }
+  function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
   function saveDayData() {
     const makes = document.getElementById('mCheck').checked;
@@ -473,13 +523,11 @@
 
   function autoFillWeekdays() {
     if (!confirm(`${currentMonth + 1}月の平日（祝日を除く月〜金）にメークス出勤を一括入力しますか？`)) return;
-
     const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
     for (let d = 1; d <= lastDate; d++) {
       const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
       const isHoliday = !!HOLIDAYS[dateKey];
-
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isHoliday) {
         if (!shiftData[dateKey]) shiftData[dateKey] = {};
         shiftData[dateKey].makes = true;
@@ -493,13 +541,11 @@
 
   function autoFillWeekendsH() {
     const defaultHours = config.hDefaultHours || 3;
-    if (!confirm(`${currentMonth + 1}月のすべての「土曜日・日曜日」に H社（${defaultHours}時間）を一括入力しますか？`)) return;
-
+    if (!confirm(`${currentMonth + 1}月の土曜日・日曜日すべてに H社（${defaultHours}時間）を一括入力しますか？`)) return;
     const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
     for (let d = 1; d <= lastDate; d++) {
       const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
-
       if (dayOfWeek === 6 || dayOfWeek === 0) {
         if (!shiftData[dateKey]) shiftData[dateKey] = {};
         shiftData[dateKey].hHours = defaultHours;
@@ -547,7 +593,6 @@
     return 1950000;
   }
 
-  // カレンダーに入力された数字だけを直接走査して児童扶養手当を計算
   function calculateJidoAllowance() {
     let totalMakesDays = 0;
     let totalHHour = 0;
@@ -558,26 +603,19 @@
       if (key.startsWith(yearPrefix)) {
         if (val.makes) totalMakesDays++;
         if (val.hHours) totalHHour += val.hHours;
-        if (val.allowance && val.allowanceNote && (val.allowanceNote.includes("養育") || val.allowanceNote.includes("養育費"))) {
+        if (val.allowance && val.allowanceNote && val.allowanceNote.includes("養育")) {
           totalChildSupport += val.allowance;
         }
       }
     }
 
-    // カレンダー入力分のみの給与総支給額
     const annualGrossSalary = (totalMakesDays * config.makesDaily) + (totalHHour * config.hHourly);
-    
-    // 給与所得
     const employmentDeduction = getEmploymentIncomeDeduction(annualGrossSalary);
     const salaryIncome = Math.max(0, annualGrossSalary - employmentDeduction);
 
-    // 養育費の80%算入
     const childSupportAdded = Math.round(totalChildSupport * 0.80);
-
-    // 判定所得額 = 給与所得 + 養育費80% - 一律控除80,000円
     const calculatedIncome = Math.max(0, salaryIncome + childSupportAdded - 80000);
 
-    // 姶良市 限度額（扶養親族1人）
     const limitFull = 870000 + ((config.childrenCount || 1) - 1) * 380000;
     const limitPartial = 2300000 + ((config.childrenCount || 1) - 1) * 380000;
 
@@ -592,7 +630,6 @@
       monthlyEstimate = baseFullAmt;
       statusText = "全部支給";
     } else if (calculatedIncome < limitPartial) {
-      // 一部支給計算式: 45,490円 - (判定所得 - 全部支給限度額) × 0.0243007
       const deductionFromFull = (calculatedIncome - limitFull) * 0.0243007;
       monthlyEstimate = Math.max(10740, Math.round((45490 - deductionFromFull) / 10) * 10);
       statusText = "一部支給";
@@ -608,6 +645,103 @@
     document.getElementById('jidoStatus').innerText = `支給区分: ${statusText}`;
   }
 
+  /* 給与明細アップロード & 内訳管理ロジック */
+  function openPayslipModal() { document.getElementById('payslipModal').style.display = 'flex'; }
+  function closePayslipModal() { document.getElementById('payslipModal').style.display = 'none'; }
+
+  function savePayslip() {
+    const month = document.getElementById('psMonth').value;
+    const company = document.getElementById('psCompany').value;
+    const gross = parseInt(document.getElementById('psGross').value, 10) || 0;
+    const deduct = parseInt(document.getElementById('psDeduct').value, 10) || 0;
+    const net = parseInt(document.getElementById('psNet').value, 10) || (gross - deduct);
+    const fileInput = document.getElementById('psFile');
+
+    if (!month) {
+      alert("対象年月を選択してください");
+      return;
+    }
+
+    if (fileInput.files && fileInput.files[0]) {
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        addPayslipRecord({
+          id: Date.now(),
+          month, company, gross, deduct, net,
+          fileName: file.name,
+          fileData: e.target.result
+        });
+      };
+      reader.readAsDataURL(file);
+    } else {
+      addPayslipRecord({
+        id: Date.now(),
+        month, company, gross, deduct, net,
+        fileName: '',
+        fileData: ''
+      });
+    }
+  }
+
+  function addPayslipRecord(item) {
+    payslips.push(item);
+    payslips.sort((a, b) => b.month.localeCompare(a.month));
+    persistData();
+    closePayslipModal();
+    renderPayslips();
+    alert('給与明細を登録しました！');
+  }
+
+  function deletePayslip(id) {
+    if (!confirm('この明細データを削除しますか？')) return;
+    payslips = payslips.filter(p => p.id !== id);
+    persistData();
+    renderPayslips();
+  }
+
+  function viewPayslipFile(id) {
+    const p = payslips.find(item => item.id === id);
+    if (!p || !p.fileData) return;
+    const win = window.open();
+    win.document.write(`<iframe src="${p.fileData}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+  }
+
+  function renderPayslips() {
+    const tbody = document.getElementById('payslipTableBody');
+    tbody.innerHTML = '';
+
+    let totalG = 0;
+    let totalD = 0;
+    let totalN = 0;
+
+    payslips.forEach(p => {
+      totalG += p.gross;
+      totalD += p.deduct;
+      totalN += p.net;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight:bold;">${p.month}</td>
+        <td>${p.company}</td>
+        <td>${p.gross.toLocaleString()}円</td>
+        <td>${p.deduct.toLocaleString()}円</td>
+        <td style="font-weight:bold; color:var(--primary);">${p.net.toLocaleString()}円</td>
+        <td>
+          ${p.fileData ? `<button class="btn" style="padding:2px 6px; font-size:10px;" onclick="viewPayslipFile(${p.id})">📄 表示</button>` : '<span style="color:#94a3b8;">なし</span>'}
+        </td>
+        <td>
+          <button class="btn" style="padding:2px 6px; color:#ef4444; border-color:#fca5a5;" onclick="deletePayslip(${p.id})">削除</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('payslipTotalGross').innerText = `${totalG.toLocaleString()}円`;
+    document.getElementById('payslipTotalDeduct').innerText = `${totalD.toLocaleString()}円`;
+    document.getElementById('payslipTotalNet').innerText = `${totalN.toLocaleString()}円`;
+  }
+
   function openSettingsModal() {
     document.getElementById('cfgMakesDaily').value = config.makesDaily;
     document.getElementById('cfgMakesRate').value = config.makesNetRate;
@@ -618,9 +752,7 @@
     document.getElementById('settingsModal').style.display = 'flex';
   }
 
-  function closeSettingsModal() {
-    document.getElementById('settingsModal').style.display = 'none';
-  }
+  function closeSettingsModal() { document.getElementById('settingsModal').style.display = 'none'; }
 
   function saveSettings() {
     config.makesDaily = parseInt(document.getElementById('cfgMakesDaily').value, 10) || 9220;
@@ -637,17 +769,14 @@
     alert('設定を保存しました');
   }
 
-  function openDataModal() {
-    document.getElementById('dataModal').style.display = 'flex';
-  }
-  function closeDataModal() {
-    document.getElementById('dataModal').style.display = 'none';
-  }
+  function openDataModal() { document.getElementById('dataModal').style.display = 'flex'; }
+  function closeDataModal() { document.getElementById('dataModal').style.display = 'none'; }
 
   function exportDataToFile() {
     const payload = {
-      version: 6,
+      version: 7,
       shiftData: shiftData,
+      payslips: payslips,
       config: config
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -662,7 +791,6 @@
   function importDataFromFile(event) {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = function(e) {
       try {
@@ -670,14 +798,14 @@
         if (parsed.shiftData) {
           shiftData = parsed.shiftData;
           if (parsed.config) config = Object.assign(config, parsed.config);
+          if (parsed.payslips) payslips = parsed.payslips;
           persistData();
           renderCalendar();
           updateSummary();
           calculateJidoAllowance();
+          renderPayslips();
           alert('バックアップデータを正常に復元しました！');
           closeDataModal();
-        } else {
-          alert('ファイルの形式が正しくありません。');
         }
       } catch(err) {
         alert('ファイルの読み込みに失敗しました。');
