@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>シフト・給与自動計算 & 児童扶養手当予測カレンダー</title>
+<title>汎用シフト・給与自動計算カレンダー</title>
 <style>
   :root {
     --primary: #2563eb;
@@ -19,18 +19,17 @@
     --jido-bg: #f5f3ff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  html, body { width: 100%; max-width: 100%; overflow-x: hidden; background: var(--bg); color: var(--text); }
-  body { padding: 8px; max-width: 980px; margin: 0 auto; padding-bottom: 60px; }
-  
-  /* サマリーカード */
+  body { background: var(--bg); color: var(--text); padding: 8px; max-width: 960px; margin: 0 auto; overflow-x: hidden; padding-bottom: 60px; }
+
+  /* ダッシュボード・サマリー */
   .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 6px; margin-bottom: 8px; }
   .card { background: var(--card); padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; }
-  .card-title { font-size: 10.5px; color: #64748b; margin-bottom: 2px; font-weight: 500; }
+  .card-title { font-size: 10px; color: #64748b; margin-bottom: 2px; font-weight: 500; }
   .card-val { font-size: 15px; font-weight: bold; }
-  .card-sub { font-size: 9.5px; color: #64748b; margin-top: 2px; }
+  .card-sub { font-size: 9px; color: #64748b; margin-top: 2px; }
   .total-val { color: var(--primary); font-size: 18px; }
 
-  /* 児童扶養手当シミュレーター */
+  /* 児童扶養手当パネル */
   .jido-panel { background: var(--jido-bg); border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
   .jido-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
   .jido-title { font-size: 12px; font-weight: bold; color: var(--jido-color); display: flex; align-items: center; gap: 4px; }
@@ -48,7 +47,7 @@
   .btn-auto { border-color: #cbd5e1; background: #f1f5f9; color: #334155; }
   .btn-auto:hover { background: #e2e8f0; }
 
-  /* カレンダーグリッド */
+  /* カレンダー */
   .calendar-grid { 
     display: grid; 
     grid-template-columns: repeat(7, minmax(0, 1fr)); 
@@ -131,13 +130,13 @@
 </head>
 <body>
 
-<!-- サマリー（会社に応じて自動生成） -->
+<!-- サマリーカード -->
 <div class="dashboard" id="dashboardContainer"></div>
 
-<!-- 児童扶養手当シミュレーターパネル -->
+<!-- 児童扶養手当予測 -->
 <div class="jido-panel">
   <div class="jido-header">
-    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 全給料・養育費連動)</span>
+    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 全収入連動)</span>
     <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
   </div>
   <div class="jido-details">
@@ -163,7 +162,7 @@
   </div>
 </div>
 
-<!-- カレンダー枠 -->
+<!-- カレンダー -->
 <div class="calendar-grid" id="calendar">
   <div class="day-name">月</div><div class="day-name">火</div><div class="day-name">水</div>
   <div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>
@@ -187,7 +186,7 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">手当の名称（「養育費」を含むと手当試算に自動合算）</label>
+      <label class="form-label">手当の名称（「養育費」を含むと手当算定に自動反映）</label>
       <input type="text" id="allowanceNote" class="form-input" placeholder="例: 養育費、児童手当">
     </div>
 
@@ -210,7 +209,7 @@
   <div class="modal-content" style="max-width:480px;">
     <div class="modal-header">⚙ 勤務先・給与設定</div>
     <div style="font-size:11px; color:#64748b; margin-bottom:10px;">
-      会社名、正社員（固定給）またはパート（時給・交通費）、一括投入のON/OFF、昇給・改定履歴を管理できます。
+      勤務先名、正社員（固定給）またはパート（時給・交通費）、一括投入のON/OFF、昇給・改定履歴を管理できます。
     </div>
 
     <div id="companySettingsContainer"></div>
@@ -269,13 +268,17 @@
   let currentMonth = 8; // 9月
   let selectedDateKey = null;
 
-  // 会社設定の初期デフォルト
-  const DEFAULT_COMPANIES = [
+  // 衝突を防ぐための完全新規ストレージキー（v2026）
+  const STORAGE_KEY_DATA = "universal_shift_data_v2026";
+  const STORAGE_KEY_CONFIG = "universal_shift_config_v2026";
+
+  // 初期デフォルト設定
+  const defaultCompanies = [
     {
-      id: "c1",
+      id: "comp_main",
       name: "勤務先1",
       color: "#3b82f6",
-      payType: "part",
+      payType: "part", // "part" (時給) または "full" (固定月給)
       netRate: 83,
       autoWeekday: true,
       autoWeekend: false,
@@ -286,7 +289,7 @@
       ]
     },
     {
-      id: "c2",
+      id: "comp_sub",
       name: "勤務先2",
       color: "#10b981",
       payType: "part",
@@ -304,46 +307,26 @@
     childrenCount: 1,
     annualChildSupport: 480000,
     otherDeductions: 0,
-    companies: JSON.parse(JSON.stringify(DEFAULT_COMPANIES))
+    companies: defaultCompanies
   };
 
   let shiftData = {};
 
-  // 安全なデータ復元・過去形式との自動互換マイグレーション
-  (function safeLoadStorage() {
-    try {
-      const rawCfg = localStorage.getItem('shift_config');
-      if (rawCfg) {
-        const parsedCfg = JSON.parse(rawCfg);
-        if (parsedCfg.companies && Array.isArray(parsedCfg.companies) && parsedCfg.companies.length > 0) {
-          config = Object.assign(config, parsedCfg);
-        } else {
-          if (parsedCfg.makesDaily) {
-            config.companies[0].history[0].hourly = Math.max(0, Math.round((parsedCfg.makesDaily - 330) / 7));
-          }
-          if (parsedCfg.hHourly) {
-            config.companies[1].history[0].hourly = parsedCfg.hHourly;
-          }
-        }
-      }
-
-      const rawData = localStorage.getItem('shift_data');
-      if (rawData) {
-        const parsedData = JSON.parse(rawData);
-        for (const [k, v] of Object.entries(parsedData)) {
-          if (!v.companies) {
-            v.companies = {};
-            if (v.makes) v.companies["c1"] = { checked: true, hours: 7 };
-            if (v.hHours > 0) v.companies["c2"] = { checked: true, hours: v.hHours };
-          }
-        }
-        shiftData = parsedData;
-      }
-    } catch(err) {
-      console.warn("Storage reset/fallback triggered", err);
+  // 保存データの読み込み（古いデータとの衝突なし）
+  try {
+    const savedCfg = localStorage.getItem(STORAGE_KEY_CONFIG);
+    if (savedCfg) {
+      config = Object.assign(config, JSON.parse(savedCfg));
     }
-  })();
+    const savedData = localStorage.getItem(STORAGE_KEY_DATA);
+    if (savedData) {
+      shiftData = JSON.parse(savedData);
+    }
+  } catch(e) {
+    console.error("Storage error:", e);
+  }
 
+  // 適用単価の取得
   function getAppliedRate(company, ymStr) {
     if (!company || !company.history || company.history.length === 0) {
       return { hourly: 1200, transit: 0, monthlySalary: 0, startYM: "2026-01" };
@@ -370,8 +353,8 @@
 
   function persistData() {
     try {
-      localStorage.setItem('shift_data', JSON.stringify(shiftData));
-      localStorage.setItem('shift_config', JSON.stringify(config));
+      localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(shiftData));
+      localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(config));
     } catch(e) {
       alert("保存領域へのアクセスに失敗しました。");
     }
@@ -514,7 +497,7 @@
         rateText = `月給: ${rate.monthlySalary.toLocaleString()}円`;
       } else {
         const dailyEstimate = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
-        rateText = `時給: ${rate.hourly.toLocaleString()}円 / 交通費: ${rate.transit.toLocaleString()}円 (日当換算 約${dailyEstimate.toLocaleString()}円)`;
+        rateText = `時給: ${rate.hourly.toLocaleString()}円 / 交通費: ${rate.transit.toLocaleString()}円 (1日換算 約${dailyEstimate.toLocaleString()}円)`;
       }
 
       box.innerHTML = `
@@ -919,7 +902,7 @@
 
   function addNewCompany() {
     const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
-    const newId = "c_" + Date.now();
+    const newId = "comp_" + Date.now();
     config.companies.push({
       id: newId,
       name: `勤務先 ${config.companies.length + 1}`,
@@ -987,7 +970,7 @@
 
   function exportDataToFile() {
     const payload = {
-      version: 9,
+      version: "universal-v2026",
       shiftData: shiftData,
       config: config
     };
@@ -1039,7 +1022,7 @@
     updateSummary();
   }
 
-  // ページの読み込み完了（DOMContentLoaded）を待ってから初期化を確実に実行
+  // ページ読み込み完了時に確実に実行
   window.addEventListener('DOMContentLoaded', () => {
     renderControls();
     renderCalendar();
