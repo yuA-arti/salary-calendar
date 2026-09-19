@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>汎用シフト・給与自動計算 & 手当予測カレンダー</title>
+<title>シフト・給与自動計算 & 児童扶養手当予測カレンダー</title>
 <style>
   :root {
     --primary: #2563eb;
@@ -22,14 +22,14 @@
   body { background: var(--bg); color: var(--text); padding: 8px; max-width: 980px; margin: 0 auto; overflow-x: hidden; }
   
   /* サマリーカード */
-  .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin-bottom: 8px; }
+  .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 6px; margin-bottom: 8px; }
   .card { background: var(--card); padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; }
-  .card-title { font-size: 10.5px; color: #64748b; margin-bottom: 2px; font-weight: 500; }
+  .card-title { font-size: 10px; color: #64748b; margin-bottom: 2px; font-weight: 500; }
   .card-val { font-size: 15px; font-weight: bold; }
-  .card-sub { font-size: 9.5px; color: #64748b; margin-top: 2px; }
+  .card-sub { font-size: 9px; color: #64748b; margin-top: 2px; }
   .total-val { color: var(--primary); font-size: 18px; }
 
-  /* 児童扶養手当シミュレーターパネル */
+  /* 児童扶養手当パネル */
   .jido-panel { background: var(--jido-bg); border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
   .jido-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
   .jido-title { font-size: 12px; font-weight: bold; color: var(--jido-color); display: flex; align-items: center; gap: 4px; }
@@ -47,7 +47,7 @@
   .btn-auto { border-color: #cbd5e1; background: #f1f5f9; color: #334155; }
   .btn-auto:hover { background: #e2e8f0; }
 
-  /* カレンダーグリッド */
+  /* カレンダーグリッド（7等分固定レイアウト） */
   .calendar-grid { 
     display: grid; 
     grid-template-columns: repeat(7, minmax(0, 1fr)); 
@@ -123,7 +123,6 @@
   .checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
   
-  /* 会社設定カード */
   .company-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
   .company-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
   .tier-box { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px; margin-top: 6px; }
@@ -131,12 +130,10 @@
 </head>
 <body>
 
-<!-- サマリー（会社ごとに動的生成） -->
-<div class="dashboard" id="dashboardContainer">
-  <!-- JSで生成 -->
-</div>
+<!-- サマリー（動的生成） -->
+<div class="dashboard" id="dashboardContainer"></div>
 
-<!-- 姶良市基準 児童扶養手当シミュレーター -->
+<!-- 児童扶養手当シミュレーターパネル -->
 <div class="jido-panel">
   <div class="jido-header">
     <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 全収入連動)</span>
@@ -157,9 +154,7 @@
     <div class="cal-title" id="monthTitle">2026年 9月</div>
     <button class="btn" onclick="nextMonth()">▶</button>
   </div>
-  <div id="autoFillButtonsContainer" style="display:flex; gap:4px; flex-wrap: wrap;">
-    <!-- 一括投入ボタンが動的に挿入されます -->
-  </div>
+  <div id="autoFillButtonsContainer" style="display:flex; gap:4px; flex-wrap: wrap;"></div>
   <div style="display:flex; gap:4px; flex-wrap: wrap; margin-left:auto;">
     <button class="btn" onclick="openCompanySettingsModal()">⚙ 会社・給与設定</button>
     <button class="btn" onclick="openJidoSettingsModal()">🏛️ 手当設定</button>
@@ -173,14 +168,12 @@
   <div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>
 </div>
 
-<!-- 日付設定モーダル（会社数に応じて動的生成） -->
+<!-- 日付設定モーダル -->
 <div class="modal" id="modal">
   <div class="modal-content">
     <div class="modal-header" id="modalDateTitle">日付設定</div>
     
-    <div id="modalCompanyList">
-      <!-- 会社ごとの入力欄が動的に挿入されます -->
-    </div>
+    <div id="modalCompanyList"></div>
 
     <div class="form-group" style="border-top:1px dashed #cbd5e1; padding-top:8px;">
       <label class="form-label" style="color:var(--event-color);">大切な予定・メモ（重複防止）</label>
@@ -193,7 +186,7 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">手当の名称（「養育費」を含むと手当算定に反映）</label>
+      <label class="form-label">手当の名称（「養育費」を含むと手当算定に自動反映）</label>
       <input type="text" id="allowanceNote" class="form-input" placeholder="例: 養育費、児童手当">
     </div>
 
@@ -219,9 +212,7 @@
       勤務先名、正社員（固定給）またはパート（時給・交通費）、一括投入のON/OFF、昇給・改定履歴を管理できます。
     </div>
 
-    <div id="companySettingsContainer">
-      <!-- 会社設定カードが動的に並びます -->
-    </div>
+    <div id="companySettingsContainer"></div>
 
     <button class="btn btn-primary" type="button" onclick="addNewCompany()" style="width:100%; margin-bottom:12px;">＋ 新しい勤務先を追加</button>
 
@@ -237,7 +228,7 @@
   <div class="modal-content">
     <div class="modal-header">🏛️ 児童扶養手当・所得控除設定</div>
     <div class="form-group">
-      <label class="form-label">年間養育費の最低想定額 (円)</label>
+      <label class="form-label">年間養育費の想定額 (円)</label>
       <input type="number" id="cfgAnnualChildSupport" class="form-input" placeholder="例: 480000">
       <span style="font-size:10px; color:#64748b;">※カレンダーに入力した養育費実績と大きい方が自動算入されます。</span>
     </div>
@@ -282,72 +273,90 @@
     navigator.storage.persist();
   }
 
-  let shiftData = {};
-  
-  // 汎用設定（会社配列管理）
+  // デフォルトの基本設定（会社配列管理）
+  const DEFAULT_COMPANIES = [
+    {
+      id: "c1",
+      name: "勤務先1",
+      color: "#3b82f6",
+      payType: "part", // "part" (時給) または "full" (月給)
+      netRate: 83,
+      autoWeekday: true,
+      autoWeekend: false,
+      defaultHours: 7,
+      history: [
+        { startYM: "2026-01", hourly: 1270, transit: 330, monthlySalary: 0, note: "旧単価" },
+        { startYM: "2026-10", hourly: 1300, transit: 330, monthlySalary: 0, note: "10月昇給" }
+      ]
+    },
+    {
+      id: "c2",
+      name: "勤務先2",
+      color: "#10b981",
+      payType: "part",
+      netRate: 96,
+      autoWeekday: false,
+      autoWeekend: true,
+      defaultHours: 3,
+      history: [
+        { startYM: "2026-01", hourly: 1370, transit: 0, monthlySalary: 0, note: "基本単価" }
+      ]
+    }
+  ];
+
   let config = {
     childrenCount: 1,
     annualChildSupport: 480000,
     otherDeductions: 0,
-    companies: [
-      {
-        id: "c1",
-        name: "メークス",
-        color: "#3b82f6",
-        payType: "part", // "part" or "full"
-        netRate: 83, // 手取り率
-        autoWeekday: true, // 平日一括対象
-        autoWeekend: false, // 土日一括対象
-        defaultHours: 7, // 基本勤務時間
-        history: [
-          { startYM: "2026-01", hourly: 1270, transit: 330, monthlySalary: 0, note: "旧単価" },
-          { startYM: "2026-10", hourly: 1300, transit: 330, monthlySalary: 0, note: "10月昇給" }
-        ]
-      },
-      {
-        id: "c2",
-        name: "H社",
-        color: "#10b981",
-        payType: "part",
-        netRate: 96,
-        autoWeekday: false,
-        autoWeekend: true,
-        defaultHours: 3,
-        history: [
-          { startYM: "2026-01", hourly: 1370, transit: 0, monthlySalary: 0, note: "基本単価" }
-        ]
-      }
-    ]
+    companies: JSON.parse(JSON.stringify(DEFAULT_COMPANIES))
   };
 
-  // 保存データの復旧と旧データからの互換マイグレーション
+  let shiftData = {};
+
+  // 保存データの安全な復旧と旧バージョンの自動マイグレーション
   try {
-    const loadedData = localStorage.getItem('shift_data');
-    if (loadedData) {
-      const parsed = JSON.parse(loadedData);
-      // 古い形式（mCheck, makes, hHours）を新形式（companies）に自動変換
-      for (const [k, v] of Object.entries(parsed)) {
-        if (!v.companies) {
-          v.companies = {};
-          if (v.makes) v.companies["c1"] = { checked: true, hours: 7 };
-          if (v.hHours > 0) v.companies["c2"] = { checked: true, hours: v.hHours };
+    const rawCfg = localStorage.getItem('shift_config');
+    if (rawCfg) {
+      const parsedCfg = JSON.parse(rawCfg);
+      if (parsedCfg.companies && Array.isArray(parsedCfg.companies) && parsedCfg.companies.length > 0) {
+        config = Object.assign(config, parsedCfg);
+      } else {
+        // 旧単価設定がある場合の引き継ぎ
+        if (parsedCfg.makesDaily) {
+          config.companies[0].history[0].hourly = Math.round((parsedCfg.makesDaily - 330) / 7);
+        }
+        if (parsedCfg.hHourly) {
+          config.companies[1].history[0].hourly = parsedCfg.hHourly;
         }
       }
-      shiftData = parsed;
     }
-    const loadedCfg = localStorage.getItem('shift_config');
-    if (loadedCfg) {
-      const parsedCfg = JSON.parse(loadedCfg);
-      if (parsedCfg.companies && Array.isArray(parsedCfg.companies)) {
-        config = Object.assign(config, parsedCfg);
+
+    const rawData = localStorage.getItem('shift_data');
+    if (rawData) {
+      const parsedData = JSON.parse(rawData);
+      // 古いキー（makes, hHours）を新フォーマット（companies）に完全変換
+      for (const [k, v] of Object.entries(parsedData)) {
+        if (!v.companies) {
+          v.companies = {};
+          if (v.makes) {
+            v.companies["c1"] = { checked: true, hours: 7 };
+          }
+          if (v.hHours > 0) {
+            v.companies["c2"] = { checked: true, hours: v.hHours };
+          }
+        }
       }
+      shiftData = parsedData;
     }
   } catch(e) {
-    console.warn("Storage loading error", e);
+    console.warn("Data loading fallback", e);
   }
 
   // 会社・年月ごとの適用単価を取得
   function getAppliedRate(company, ymStr) {
+    if (!company || !company.history || company.history.length === 0) {
+      return { hourly: 1200, transit: 0, monthlySalary: 0, startYM: "2026-01" };
+    }
     const targetYM = ymStr.slice(0, 7);
     const sorted = [...company.history].sort((a, b) => a.startYM.localeCompare(b.startYM));
     let applied = sorted[0];
@@ -373,7 +382,7 @@
       localStorage.setItem('shift_data', JSON.stringify(shiftData));
       localStorage.setItem('shift_config', JSON.stringify(config));
     } catch(e) {
-      alert("保存領域へのアクセスに失敗しました。");
+      alert("保存に失敗しました。");
     }
   }
 
@@ -384,9 +393,9 @@
     calculateJidoAllowance();
   }
 
-  // コントロールバーの一括ボタンを動的生成
   function renderControls() {
     const container = document.getElementById('autoFillButtonsContainer');
+    if (!container) return;
     container.innerHTML = '';
 
     config.companies.forEach(comp => {
@@ -408,8 +417,10 @@
   }
 
   function renderCalendar() {
-    document.getElementById('monthTitle').innerText = `${currentYear}年 ${currentMonth + 1}月`;
+    const titleEl = document.getElementById('monthTitle');
+    if (titleEl) titleEl.innerText = `${currentYear}年 ${currentMonth + 1}月`;
     const cal = document.getElementById('calendar');
+    if (!cal) return;
     
     const cells = cal.querySelectorAll('.day-cell');
     cells.forEach(c => c.remove());
@@ -476,7 +487,7 @@
               if (comp.payType === 'full') {
                 b.innerText = comp.name;
               } else {
-                b.innerText = `${comp.name} ${cData.hours || comp.defaultHours || 0}h`;
+                b.innerText = `${comp.name} ${cData.hours !== undefined ? cData.hours : (comp.defaultHours || 0)}h`;
               }
               badgeList.appendChild(b);
             }
@@ -519,7 +530,7 @@
         rateText = `月給: ${rate.monthlySalary.toLocaleString()}円`;
       } else {
         const dailyEstimate = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
-        rateText = `時給: ${rate.hourly.toLocaleString()}円 / 交通費: ${rate.transit.toLocaleString()}円 (1日換算 約${dailyEstimate.toLocaleString()}円)`;
+        rateText = `時給: ${rate.hourly.toLocaleString()}円 / 交通費: ${rate.transit.toLocaleString()}円 (日当換算 約${dailyEstimate.toLocaleString()}円)`;
       }
 
       box.innerHTML = `
@@ -588,7 +599,6 @@
     calculateJidoAllowance();
   }
 
-  // 平日または土日の一括投入
   function autoFill(compId, targetType) {
     const comp = config.companies.find(c => c.id === compId);
     if (!comp) return;
@@ -626,7 +636,6 @@
     calculateJidoAllowance();
   }
 
-  // 月別給与サマリーの更新
   function updateSummary() {
     const currentYM = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
     let allowanceTotal = 0;
@@ -658,7 +667,6 @@
               
               if (comp.payType === 'part') {
                 const r = compSummary[comp.id].rate;
-                // 日毎計算: (時給 × 時間) ＋ 交通費
                 compSummary[comp.id].gross += (r.hourly * h) + (r.transit || 0);
               }
             }
@@ -669,9 +677,9 @@
 
     let overallNet = allowanceTotal;
     const container = document.getElementById('dashboardContainer');
+    if (!container) return;
     container.innerHTML = '';
 
-    // 当月実入金カード
     const totalCard = document.createElement('div');
     totalCard.className = 'card';
     totalCard.innerHTML = `
@@ -681,7 +689,6 @@
     `;
     container.appendChild(totalCard);
 
-    // 各会社のサマリーカード
     config.companies.forEach(comp => {
       const sum = compSummary[comp.id];
       if (comp.payType === 'full') {
@@ -700,7 +707,6 @@
       container.appendChild(card);
     });
 
-    // 手当・養育費カード
     const allCard = document.createElement('div');
     allCard.className = 'card';
     allCard.innerHTML = `
@@ -710,7 +716,8 @@
     `;
     container.appendChild(allCard);
 
-    document.getElementById('totalNetVal').innerText = `${overallNet.toLocaleString()}円`;
+    const totalNetEl = document.getElementById('totalNetVal');
+    if (totalNetEl) totalNetEl.innerText = `${overallNet.toLocaleString()}円`;
   }
 
   function getEmploymentIncomeDeduction(gross) {
@@ -723,7 +730,6 @@
     return 1950000;
   }
 
-  // 姶良市基準 児童扶養手当予測
   function calculateJidoAllowance() {
     let calendarSalary = 0;
     let calendarChildSupport = 0;
@@ -749,7 +755,6 @@
       }
     }
 
-    // 正社員固定給の年間合算
     config.companies.filter(c => c.payType === 'full').forEach(comp => {
       for (let m = 1; m <= 12; m++) {
         const ym = `${currentYear}-${String(m).padStart(2, '0')}`;
@@ -789,16 +794,19 @@
       statusText = "支給停止（上限超過）";
     }
 
-    document.getElementById('jidoMonthlyEstimate').innerText = monthlyEstimate > 0 ? `${statusText}  約 ${monthlyEstimate.toLocaleString()}円 / 月` : statusText;
-    document.getElementById('jidoAnnualSalary').innerText = `年間給与見込: 約 ${Math.round(annualGrossSalary).toLocaleString()}円`;
-    document.getElementById('jidoAnnualChildSupport').innerText = `年間養育費: ${annualChildSupport.toLocaleString()}円 (算入: ${childSupportAdded.toLocaleString()}円)`;
-    document.getElementById('jidoCalculatedIncome').innerText = `判定所得額: ${calculatedIncome.toLocaleString()}円`;
-    document.getElementById('jidoStatus').innerText = `区分: ${statusText}`;
+    const jidoMonthlyEl = document.getElementById('jidoMonthlyEstimate');
+    if (jidoMonthlyEl) {
+      jidoMonthlyEl.innerText = monthlyEstimate > 0 ? `${statusText}  約 ${monthlyEstimate.toLocaleString()}円 / 月` : statusText;
+      document.getElementById('jidoAnnualSalary').innerText = `年間給与見込: 約 ${Math.round(annualGrossSalary).toLocaleString()}円`;
+      document.getElementById('jidoAnnualChildSupport').innerText = `年間養育費: ${annualChildSupport.toLocaleString()}円 (算入: ${childSupportAdded.toLocaleString()}円)`;
+      document.getElementById('jidoCalculatedIncome').innerText = `判定所得額: ${calculatedIncome.toLocaleString()}円`;
+      document.getElementById('jidoStatus').innerText = `区分: ${statusText}`;
+    }
   }
 
-  // 会社設定モーダル
   function renderCompanySettingsUI() {
     const container = document.getElementById('companySettingsContainer');
+    if (!container) return;
     container.innerHTML = '';
 
     config.companies.forEach((comp, cIdx) => {
@@ -839,7 +847,7 @@
       card.innerHTML = `
         <div class="company-card-header">
           <input type="text" class="form-input" style="font-weight:bold; width:65%; font-size:13px;" value="${comp.name}" placeholder="会社名" onchange="updateCompField(${cIdx}, 'name', this.value)">
-          <button class="btn" style="padding:2px 6px; font-size:10px; color:#ef4444;" onclick="deleteCompany(${cIdx})">会社を削除</button>
+          ${config.companies.length > 1 ? `<button class="btn" style="padding:2px 6px; font-size:10px; color:#ef4444;" onclick="deleteCompany(${cIdx})">削除</button>` : ''}
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
@@ -868,11 +876,11 @@
           <div style="display:flex; gap:12px;">
             <label class="checkbox-label" style="font-size:11px;">
               <input type="checkbox" ${comp.autoWeekday ? 'checked' : ''} onchange="updateCompField(${cIdx}, 'autoWeekday', this.checked)">
-              平日一括ボタンを有効
+              平日一括を有効
             </label>
             <label class="checkbox-label" style="font-size:11px;">
               <input type="checkbox" ${comp.autoWeekend ? 'checked' : ''} onchange="updateCompField(${cIdx}, 'autoWeekend', this.checked)">
-              土日一括ボタンを有効
+              土日一括を有効
             </label>
           </div>
         </div>
@@ -945,6 +953,10 @@
   }
 
   function deleteCompany(cIdx) {
+    if (config.companies.length <= 1) {
+      alert("勤務先は最低1つ必要です。");
+      return;
+    }
     if (confirm(`「${config.companies[cIdx].name}」を削除しますか？`)) {
       config.companies.splice(cIdx, 1);
       renderCompanySettingsUI();
@@ -1043,6 +1055,7 @@
     updateSummary();
   }
 
+  // 起動実行
   init();
 </script>
 </body>
