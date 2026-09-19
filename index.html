@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>汎用シフト・給与自動計算カレンダー</title>
+<title>シフト・給与自動計算 & 児童扶養手当予測カレンダー</title>
 <style>
   :root {
     --primary: #2563eb;
@@ -20,16 +20,16 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { background: var(--bg); color: var(--text); padding: 8px; max-width: 960px; margin: 0 auto; overflow-x: hidden; padding-bottom: 60px; }
-
-  /* ダッシュボード・サマリー */
+  
+  /* サマリーカード */
   .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 6px; margin-bottom: 8px; }
   .card { background: var(--card); padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; }
-  .card-title { font-size: 10px; color: #64748b; margin-bottom: 2px; font-weight: 500; }
+  .card-title { font-size: 10.5px; color: #64748b; margin-bottom: 2px; font-weight: 500; }
   .card-val { font-size: 15px; font-weight: bold; }
-  .card-sub { font-size: 9px; color: #64748b; margin-top: 2px; }
+  .card-sub { font-size: 9.5px; color: #64748b; margin-top: 2px; }
   .total-val { color: var(--primary); font-size: 18px; }
 
-  /* 児童扶養手当パネル */
+  /* 児童扶養手当シミュレーターパネル */
   .jido-panel { background: var(--jido-bg); border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
   .jido-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
   .jido-title { font-size: 12px; font-weight: bold; color: var(--jido-color); display: flex; align-items: center; gap: 4px; }
@@ -47,7 +47,7 @@
   .btn-auto { border-color: #cbd5e1; background: #f1f5f9; color: #334155; }
   .btn-auto:hover { background: #e2e8f0; }
 
-  /* カレンダー */
+  /* カレンダーグリッド */
   .calendar-grid { 
     display: grid; 
     grid-template-columns: repeat(7, minmax(0, 1fr)); 
@@ -133,10 +133,10 @@
 <!-- サマリーカード -->
 <div class="dashboard" id="dashboardContainer"></div>
 
-<!-- 児童扶養手当予測 -->
+<!-- 児童扶養手当シミュレーターパネル -->
 <div class="jido-panel">
   <div class="jido-header">
-    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 全収入連動)</span>
+    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 全給与・養育費連動)</span>
     <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
   </div>
   <div class="jido-details">
@@ -162,7 +162,7 @@
   </div>
 </div>
 
-<!-- カレンダー -->
+<!-- カレンダー枠 -->
 <div class="calendar-grid" id="calendar">
   <div class="day-name">月</div><div class="day-name">火</div><div class="day-name">水</div>
   <div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>
@@ -186,7 +186,7 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">手当の名称（「養育費」を含むと手当算定に自動反映）</label>
+      <label class="form-label">手当の名称（「養育費」を含むと手当算定に自動合算）</label>
       <input type="text" id="allowanceNote" class="form-input" placeholder="例: 養育費、児童手当">
     </div>
 
@@ -209,7 +209,7 @@
   <div class="modal-content" style="max-width:480px;">
     <div class="modal-header">⚙ 勤務先・給与設定</div>
     <div style="font-size:11px; color:#64748b; margin-bottom:10px;">
-      勤務先名、正社員（固定給）またはパート（時給・交通費）、一括投入のON/OFF、昇給・改定履歴を管理できます。
+      会社名、正社員（固定給）またはパート（時給・交通費）、一括投入のON/OFF、昇給・改定履歴を管理できます。
     </div>
 
     <div id="companySettingsContainer"></div>
@@ -264,33 +264,33 @@
 </div>
 
 <script>
+(function() {
   let currentYear = 2026;
   let currentMonth = 8; // 9月
   let selectedDateKey = null;
 
-  // 衝突を防ぐための完全新規ストレージキー（v2026）
-  const STORAGE_KEY_DATA = "universal_shift_data_v2026";
-  const STORAGE_KEY_CONFIG = "universal_shift_config_v2026";
+  const STORAGE_KEY_DATA = "payroll_cal_data_v1";
+  const STORAGE_KEY_CONFIG = "payroll_cal_cfg_v1";
 
-  // 初期デフォルト設定
+  // デフォルト設定
   const defaultCompanies = [
     {
-      id: "comp_main",
-      name: "勤務先1",
+      id: "comp_1",
+      name: "会社1",
       color: "#3b82f6",
-      payType: "part", // "part" (時給) または "full" (固定月給)
+      payType: "part", // "part" or "full"
       netRate: 83,
       autoWeekday: true,
       autoWeekend: false,
       defaultHours: 7,
       history: [
-        { startYM: "2026-01", hourly: 1270, transit: 330, monthlySalary: 0, note: "旧単価" },
-        { startYM: "2026-10", hourly: 1300, transit: 330, monthlySalary: 0, note: "10月昇給" }
+        { startYM: "2026-01", hourly: 1270, transit: 330, monthlySalary: 0 },
+        { startYM: "2026-10", hourly: 1300, transit: 330, monthlySalary: 0 }
       ]
     },
     {
-      id: "comp_sub",
-      name: "勤務先2",
+      id: "comp_2",
+      name: "会社2",
       color: "#10b981",
       payType: "part",
       netRate: 96,
@@ -298,7 +298,7 @@
       autoWeekend: true,
       defaultHours: 3,
       history: [
-        { startYM: "2026-01", hourly: 1370, transit: 0, monthlySalary: 0, note: "基本単価" }
+        { startYM: "2026-01", hourly: 1370, transit: 0, monthlySalary: 0 }
       ]
     }
   ];
@@ -312,31 +312,34 @@
 
   let shiftData = {};
 
-  // 保存データの読み込み（古いデータとの衝突なし）
+  // 安全読み込み
   try {
-    const savedCfg = localStorage.getItem(STORAGE_KEY_CONFIG);
-    if (savedCfg) {
-      config = Object.assign(config, JSON.parse(savedCfg));
+    const rawCfg = localStorage.getItem(STORAGE_KEY_CONFIG);
+    if (rawCfg) {
+      const parsed = JSON.parse(rawCfg);
+      if (parsed && Array.isArray(parsed.companies) && parsed.companies.length > 0) {
+        config = Object.assign(config, parsed);
+      }
     }
-    const savedData = localStorage.getItem(STORAGE_KEY_DATA);
-    if (savedData) {
-      shiftData = JSON.parse(savedData);
+    const rawData = localStorage.getItem(STORAGE_KEY_DATA);
+    if (rawData) {
+      const parsedD = JSON.parse(rawData);
+      if (parsedD) shiftData = parsedD;
     }
-  } catch(e) {
-    console.error("Storage error:", e);
+  } catch (e) {
+    console.warn("Storage load warning", e);
   }
 
-  // 適用単価の取得
   function getAppliedRate(company, ymStr) {
     if (!company || !company.history || company.history.length === 0) {
       return { hourly: 1200, transit: 0, monthlySalary: 0, startYM: "2026-01" };
     }
     const targetYM = ymStr.slice(0, 7);
-    const sorted = [...company.history].sort((a, b) => a.startYM.localeCompare(b.startYM));
+    const sorted = company.history.slice().sort((a, b) => a.startYM.localeCompare(b.startYM));
     let applied = sorted[0];
-    for (const h of sorted) {
-      if (targetYM >= h.startYM) {
-        applied = h;
+    for (let i = 0; i < sorted.length; i++) {
+      if (targetYM >= sorted[i].startYM) {
+        applied = sorted[i];
       }
     }
     return applied;
@@ -355,12 +358,12 @@
     try {
       localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(shiftData));
       localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(config));
-    } catch(e) {
-      alert("保存領域へのアクセスに失敗しました。");
+    } catch (e) {
+      alert("保存に失敗しました。");
     }
   }
 
-  function renderControls() {
+  window.renderControls = function() {
     const container = document.getElementById('autoFillButtonsContainer');
     if (!container) return;
     container.innerHTML = '';
@@ -370,20 +373,20 @@
         const btn = document.createElement('button');
         btn.className = 'btn btn-auto';
         btn.innerText = `⚡ ${comp.name} 平日一括`;
-        btn.onclick = () => autoFill(comp.id, 'weekday');
+        btn.onclick = () => window.autoFill(comp.id, 'weekday');
         container.appendChild(btn);
       }
       if (comp.autoWeekend) {
         const btn = document.createElement('button');
         btn.className = 'btn btn-auto';
         btn.innerText = `⚡ ${comp.name} 土日一括`;
-        btn.onclick = () => autoFill(comp.id, 'weekend');
+        btn.onclick = () => window.autoFill(comp.id, 'weekend');
         container.appendChild(btn);
       }
     });
-  }
+  };
 
-  function renderCalendar() {
+  window.renderCalendar = function() {
     const titleEl = document.getElementById('monthTitle');
     if (titleEl) titleEl.innerText = `${currentYear}年 ${currentMonth + 1}月`;
     const cal = document.getElementById('calendar');
@@ -409,14 +412,14 @@
       
       const isAutoHoliday = !!HOLIDAYS[dateKey];
       const data = shiftData[dateKey];
-      const isCustomHoliday = data && data.isHoliday !== undefined ? data.isHoliday : isAutoHoliday;
+      const isCustomHoliday = (data && data.isHoliday !== undefined) ? data.isHoliday : isAutoHoliday;
 
       let classList = ['day-cell'];
       if (dayOfWeek === 6) classList.push('sat');
       if (dayOfWeek === 0) classList.push('sun');
       if (isCustomHoliday) classList.push('holiday');
       cell.className = classList.join(' ');
-      cell.onclick = () => openModal(dateKey, d, isAutoHoliday);
+      cell.onclick = () => window.openModal(dateKey, d, isAutoHoliday);
 
       const dayTop = document.createElement('div');
       dayTop.className = 'day-top';
@@ -471,9 +474,9 @@
       cell.appendChild(badgeList);
       cal.appendChild(cell);
     }
-  }
+  };
 
-  function openModal(dateKey, day, isAutoHoliday) {
+  window.openModal = function(dateKey, day, isAutoHoliday) {
     selectedDateKey = dateKey;
     document.getElementById('modalDateTitle').innerText = `${currentMonth + 1}月 ${day}日の設定`;
     
@@ -497,7 +500,7 @@
         rateText = `月給: ${rate.monthlySalary.toLocaleString()}円`;
       } else {
         const dailyEstimate = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
-        rateText = `時給: ${rate.hourly.toLocaleString()}円 / 交通費: ${rate.transit.toLocaleString()}円 (1日換算 約${dailyEstimate.toLocaleString()}円)`;
+        rateText = `時給: ${rate.hourly.toLocaleString()}円 / 交通費: ${rate.transit.toLocaleString()}円 (日当換算 約${dailyEstimate.toLocaleString()}円)`;
       }
 
       box.innerHTML = `
@@ -523,13 +526,13 @@
     document.getElementById('isHolidayCheck').checked = data.isHoliday !== undefined ? data.isHoliday : isAutoHoliday;
 
     document.getElementById('modal').style.display = 'flex';
-  }
+  };
 
-  function closeModal() {
+  window.closeModal = function() {
     document.getElementById('modal').style.display = 'none';
-  }
+  };
 
-  function saveDayData() {
+  window.saveDayData = function() {
     const companiesData = {};
     let hasCompanyChecked = false;
 
@@ -560,13 +563,13 @@
     }
 
     persistData();
-    closeModal();
-    renderCalendar();
-    updateSummary();
-    calculateJidoAllowance();
-  }
+    window.closeModal();
+    window.renderCalendar();
+    window.updateSummary();
+    window.calculateJidoAllowance();
+  };
 
-  function autoFill(compId, targetType) {
+  window.autoFill = function(compId, targetType) {
     const comp = config.companies.find(c => c.id === compId);
     if (!comp) return;
 
@@ -598,12 +601,12 @@
     }
 
     persistData();
-    renderCalendar();
-    updateSummary();
-    calculateJidoAllowance();
-  }
+    window.renderCalendar();
+    window.updateSummary();
+    window.calculateJidoAllowance();
+  };
 
-  function updateSummary() {
+  window.updateSummary = function() {
     const currentYM = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
     let allowanceTotal = 0;
     const compSummary = {};
@@ -685,7 +688,7 @@
 
     const totalNetEl = document.getElementById('totalNetVal');
     if (totalNetEl) totalNetEl.innerText = `${overallNet.toLocaleString()}円`;
-  }
+  };
 
   function getEmploymentIncomeDeduction(gross) {
     if (gross <= 550000) return gross;
@@ -697,7 +700,7 @@
     return 1950000;
   }
 
-  function calculateJidoAllowance() {
+  window.calculateJidoAllowance = function() {
     let calendarSalary = 0;
     let calendarChildSupport = 0;
     const yearPrefix = `${currentYear}-`;
@@ -769,9 +772,9 @@
       document.getElementById('jidoCalculatedIncome').innerText = `判定所得額: ${calculatedIncome.toLocaleString()}円`;
       document.getElementById('jidoStatus').innerText = `区分: ${statusText}`;
     }
-  }
+  };
 
-  function renderCompanySettingsUI() {
+  window.renderCompanySettingsUI = function() {
     const container = document.getElementById('companySettingsContainer');
     if (!container) return;
     container.innerHTML = '';
@@ -781,7 +784,7 @@
       card.className = 'company-card';
 
       let tiersHtml = '';
-      comp.history.sort((a, b) => a.startYM.localeCompare(b.startYM)).forEach((tier, tIdx) => {
+      comp.history.slice().sort((a, b) => a.startYM.localeCompare(b.startYM)).forEach((tier, tIdx) => {
         tiersHtml += `
           <div class="tier-box">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -862,50 +865,49 @@
       `;
       container.appendChild(card);
     });
-  }
+  };
 
-  function updateCompField(cIdx, field, val) {
+  window.updateCompField = function(cIdx, field, val) {
     if (field === 'netRate' || field === 'defaultHours') {
       config.companies[cIdx][field] = parseFloat(val) || 0;
     } else {
       config.companies[cIdx][field] = val;
     }
-    renderCompanySettingsUI();
-  }
+    window.renderCompanySettingsUI();
+  };
 
-  function updateCompTier(cIdx, tIdx, field, val) {
+  window.updateCompTier = function(cIdx, tIdx, field, val) {
     if (field === 'hourly' || field === 'transit' || field === 'monthlySalary') {
       config.companies[cIdx].history[tIdx][field] = parseInt(val, 10) || 0;
     } else {
       config.companies[cIdx].history[tIdx][field] = val;
     }
-  }
+  };
 
-  function addCompTier(cIdx) {
+  window.addCompTier = function(cIdx) {
     const comp = config.companies[cIdx];
     const lastTier = comp.history[comp.history.length - 1] || { hourly: 1200, transit: 0, monthlySalary: 200000 };
     comp.history.push({
       startYM: "2026-10",
       hourly: lastTier.hourly || 0,
       transit: lastTier.transit || 0,
-      monthlySalary: lastTier.monthlySalary || 0,
-      note: "改定"
+      monthlySalary: lastTier.monthlySalary || 0
     });
-    renderCompanySettingsUI();
-  }
+    window.renderCompanySettingsUI();
+  };
 
-  function deleteCompTier(cIdx, tIdx) {
+  window.deleteCompTier = function(cIdx, tIdx) {
     if (config.companies[cIdx].history.length <= 1) return;
     config.companies[cIdx].history.splice(tIdx, 1);
-    renderCompanySettingsUI();
-  }
+    window.renderCompanySettingsUI();
+  };
 
-  function addNewCompany() {
+  window.addNewCompany = function() {
     const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
     const newId = "comp_" + Date.now();
     config.companies.push({
       id: newId,
-      name: `勤務先 ${config.companies.length + 1}`,
+      name: `会社 ${config.companies.length + 1}`,
       color: colors[config.companies.length % colors.length],
       payType: "part",
       netRate: 85,
@@ -913,67 +915,65 @@
       autoWeekend: false,
       defaultHours: 7,
       history: [
-        { startYM: "2026-01", hourly: 1200, transit: 0, monthlySalary: 0, note: "初期設定" }
+        { startYM: "2026-01", hourly: 1200, transit: 0, monthlySalary: 0 }
       ]
     });
-    renderCompanySettingsUI();
-  }
+    window.renderCompanySettingsUI();
+  };
 
-  function deleteCompany(cIdx) {
+  window.deleteCompany = function(cIdx) {
     if (config.companies.length <= 1) {
       alert("勤務先は最低1つ必要です。");
       return;
     }
     if (confirm(`「${config.companies[cIdx].name}」を削除しますか？`)) {
       config.companies.splice(cIdx, 1);
-      renderCompanySettingsUI();
+      window.renderCompanySettingsUI();
     }
-  }
+  };
 
-  function openCompanySettingsModal() {
-    renderCompanySettingsUI();
+  window.openCompanySettingsModal = function() {
+    window.renderCompanySettingsUI();
     document.getElementById('companySettingsModal').style.display = 'flex';
-  }
-  function closeCompanySettingsModal() {
+  };
+  window.closeCompanySettingsModal = function() {
     document.getElementById('companySettingsModal').style.display = 'none';
-  }
+  };
 
-  function saveCompanySettings() {
+  window.saveCompanySettings = function() {
     persistData();
-    closeCompanySettingsModal();
-    renderControls();
-    renderCalendar();
-    updateSummary();
-    calculateJidoAllowance();
+    window.closeCompanySettingsModal();
+    window.renderControls();
+    window.renderCalendar();
+    window.updateSummary();
+    window.calculateJidoAllowance();
     alert('勤務先・給与設定を保存しました');
-  }
+  };
 
-  function openJidoSettingsModal() {
+  window.openJidoSettingsModal = function() {
     document.getElementById('cfgAnnualChildSupport').value = config.annualChildSupport || 480000;
     document.getElementById('cfgChildrenCount').value = config.childrenCount || 1;
     document.getElementById('cfgOtherDeductions').value = config.otherDeductions || 0;
     document.getElementById('jidoSettingsModal').style.display = 'flex';
-  }
-  function closeJidoSettingsModal() { document.getElementById('jidoSettingsModal').style.display = 'none'; }
-  function saveJidoSettings() {
+  };
+  window.closeJidoSettingsModal = function() {
+    document.getElementById('jidoSettingsModal').style.display = 'none';
+  };
+  window.saveJidoSettings = function() {
     config.annualChildSupport = parseInt(document.getElementById('cfgAnnualChildSupport').value, 10) || 480000;
     config.childrenCount = parseInt(document.getElementById('cfgChildrenCount').value, 10) || 1;
     config.otherDeductions = parseInt(document.getElementById('cfgOtherDeductions').value, 10) || 0;
     persistData();
-    closeJidoSettingsModal();
-    calculateJidoAllowance();
+    window.closeJidoSettingsModal();
+    window.calculateJidoAllowance();
     alert('手当設定を更新しました');
-  }
+  };
 
-  function openDataModal() { document.getElementById('dataModal').style.display = 'flex'; }
-  function closeDataModal() { document.getElementById('dataModal').style.display = 'none'; }
+  window.openDataModal = function() { document.getElementById('dataModal').style.display = 'flex'; };
+  window.closeDataModal = function() { document.getElementById('dataModal').style.display = 'none'; };
 
-  function exportDataToFile() {
-    const payload = {
-      version: "universal-v2026",
-      shiftData: shiftData,
-      config: config
-    };
+  window.exportDataToFile = function() {
+    const payload = { version: "standalone_v1", shiftData: shiftData, config: config };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -981,9 +981,9 @@
     a.download = `shift_backup_${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }
+  };
 
-  function importDataFromFile(event) {
+  window.importDataFromFile = function(event) {
     const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -994,41 +994,40 @@
           shiftData = parsed.shiftData;
           if (parsed.config) config = Object.assign(config, parsed.config);
           persistData();
-          renderControls();
-          renderCalendar();
-          updateSummary();
-          calculateJidoAllowance();
+          window.renderControls();
+          window.renderCalendar();
+          window.updateSummary();
+          window.calculateJidoAllowance();
           alert('バックアップデータを正常に復元しました！');
-          closeDataModal();
+          window.closeDataModal();
         }
       } catch(err) {
         alert('ファイルの読み込みに失敗しました。');
       }
     };
     reader.readAsText(file);
-  }
+  };
 
-  function prevMonth() {
+  window.prevMonth = function() {
     currentMonth--;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-    renderCalendar();
-    updateSummary();
-  }
+    window.renderCalendar();
+    window.updateSummary();
+  };
 
-  function nextMonth() {
+  window.nextMonth = function() {
     currentMonth++;
     if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-    renderCalendar();
-    updateSummary();
-  }
+    window.renderCalendar();
+    window.updateSummary();
+  };
 
-  // ページ読み込み完了時に確実に実行
-  window.addEventListener('DOMContentLoaded', () => {
-    renderControls();
-    renderCalendar();
-    updateSummary();
-    calculateJidoAllowance();
-  });
+  // 即時起動（イベント待ちによる不発を完全防止）
+  window.renderControls();
+  window.renderCalendar();
+  window.updateSummary();
+  window.calculateJidoAllowance();
+})();
 </script>
 </body>
 </html>
