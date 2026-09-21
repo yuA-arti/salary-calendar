@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>シフト・給与自動計算 & 児童扶養手当予測カレンダー</title>
+<title>シフト・給与自動計算カレンダー</title>
 <style>
   :root {
     --primary: #2563eb;
@@ -29,7 +29,7 @@
   .card-sub { font-size: 9.5px; color: #64748b; margin-top: 2px; }
   .total-val { color: var(--primary); font-size: 18px; }
 
-  /* 児童扶養手当シミュレーターパネル */
+  /* 児童扶養手当パネル */
   .jido-panel { background: var(--jido-bg); border: 1px solid #ddd6fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
   .jido-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
   .jido-title { font-size: 12px; font-weight: bold; color: var(--jido-color); display: flex; align-items: center; gap: 4px; }
@@ -264,80 +264,79 @@
 </div>
 
 <script>
-(function() {
-  let currentYear = 2026;
-  let currentMonth = 8; // 9月
-  let selectedDateKey = null;
+  // グローバル変数定義
+  var currentYear = 2026;
+  var currentMonth = 8; // 9月 (0-indexed)
+  var selectedDateKey = null;
 
-  const STORAGE_KEY_DATA = "payroll_cal_data_v1";
-  const STORAGE_KEY_CONFIG = "payroll_cal_cfg_v1";
+  // 完全に独立した新しい保存キー名（古い壊れたデータとの衝突を完全防止）
+  var KEY_DATA = "fresh_app_data_2026";
+  var KEY_CFG = "fresh_app_cfg_2026";
 
-  // デフォルト設定
-  const defaultCompanies = [
-    {
-      id: "comp_1",
-      name: "会社1",
-      color: "#3b82f6",
-      payType: "part", // "part" or "full"
-      netRate: 83,
-      autoWeekday: true,
-      autoWeekend: false,
-      defaultHours: 7,
-      history: [
-        { startYM: "2026-01", hourly: 1270, transit: 330, monthlySalary: 0 },
-        { startYM: "2026-10", hourly: 1300, transit: 330, monthlySalary: 0 }
-      ]
-    },
-    {
-      id: "comp_2",
-      name: "会社2",
-      color: "#10b981",
-      payType: "part",
-      netRate: 96,
-      autoWeekday: false,
-      autoWeekend: true,
-      defaultHours: 3,
-      history: [
-        { startYM: "2026-01", hourly: 1370, transit: 0, monthlySalary: 0 }
-      ]
-    }
-  ];
-
-  let config = {
+  // 初期デフォルト設定
+  var config = {
     childrenCount: 1,
     annualChildSupport: 480000,
     otherDeductions: 0,
-    companies: defaultCompanies
+    companies: [
+      {
+        id: "c1",
+        name: "会社1",
+        color: "#3b82f6",
+        payType: "part", // "part" または "full"
+        netRate: 83,
+        autoWeekday: true,
+        autoWeekend: false,
+        defaultHours: 7,
+        history: [
+          { startYM: "2026-01", hourly: 1270, transit: 330, monthlySalary: 0 },
+          { startYM: "2026-10", hourly: 1300, transit: 330, monthlySalary: 0 }
+        ]
+      },
+      {
+        id: "c2",
+        name: "会社2",
+        color: "#10b981",
+        payType: "part",
+        netRate: 96,
+        autoWeekday: false,
+        autoWeekend: true,
+        defaultHours: 3,
+        history: [
+          { startYM: "2026-01", hourly: 1370, transit: 0, monthlySalary: 0 }
+        ]
+      }
+    ]
   };
 
-  let shiftData = {};
+  var shiftData = {};
 
-  // 安全読み込み
+  // 安全な初期化読み込み
   try {
-    const rawCfg = localStorage.getItem(STORAGE_KEY_CONFIG);
+    var rawCfg = localStorage.getItem(KEY_CFG);
     if (rawCfg) {
-      const parsed = JSON.parse(rawCfg);
-      if (parsed && Array.isArray(parsed.companies) && parsed.companies.length > 0) {
-        config = Object.assign(config, parsed);
+      var pCfg = JSON.parse(rawCfg);
+      if (pCfg && pCfg.companies && pCfg.companies.length > 0) {
+        config = pCfg;
       }
     }
-    const rawData = localStorage.getItem(STORAGE_KEY_DATA);
-    if (rawData) {
-      const parsedD = JSON.parse(rawData);
-      if (parsedD) shiftData = parsedD;
+    var rawD = localStorage.getItem(KEY_DATA);
+    if (rawD) {
+      var pD = JSON.parse(rawD);
+      if (pD) shiftData = pD;
     }
-  } catch (e) {
-    console.warn("Storage load warning", e);
+  } catch(e) {
+    console.warn("Storage warning:", e);
   }
 
-  function getAppliedRate(company, ymStr) {
-    if (!company || !company.history || company.history.length === 0) {
+  function getAppliedRate(comp, ymStr) {
+    if (!comp || !comp.history || comp.history.length === 0) {
       return { hourly: 1200, transit: 0, monthlySalary: 0, startYM: "2026-01" };
     }
-    const targetYM = ymStr.slice(0, 7);
-    const sorted = company.history.slice().sort((a, b) => a.startYM.localeCompare(b.startYM));
-    let applied = sorted[0];
-    for (let i = 0; i < sorted.length; i++) {
+    var targetYM = ymStr.slice(0, 7);
+    var sorted = comp.history.slice().sort(function(a, b) { return a.startYM.localeCompare(b.startYM); });
+    var applied = sorted[0];
+    for (var i = 0; i < sorted.length; i++) {
       if (targetYM >= sorted[i].startYM) {
         applied = sorted[i];
       }
@@ -345,7 +344,7 @@
     return applied;
   }
 
-  const HOLIDAYS = {
+  var HOLIDAYS = {
     "2026-01-01": "元日", "2026-01-12": "成人の日", "2026-02-11": "建国記念", "2026-02-23": "天皇誕生日",
     "2026-03-20": "春分の日", "2026-04-29": "昭和の日", "2026-05-03": "憲法記念", "2026-05-04": "みどりの日",
     "2026-05-05": "こどもの日", "2026-05-06": "振替休日", "2026-07-20": "海の日", "2026-08-11": "山の日",
@@ -356,191 +355,195 @@
 
   function persistData() {
     try {
-      localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(shiftData));
-      localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(config));
-    } catch (e) {
-      alert("保存に失敗しました。");
-    }
+      localStorage.setItem(KEY_DATA, JSON.stringify(shiftData));
+      localStorage.setItem(KEY_CFG, JSON.stringify(config));
+    } catch(e) {}
   }
 
-  window.renderControls = function() {
-    const container = document.getElementById('autoFillButtonsContainer');
+  function renderControls() {
+    var container = document.getElementById('autoFillButtonsContainer');
     if (!container) return;
     container.innerHTML = '';
 
-    config.companies.forEach(comp => {
+    config.companies.forEach(function(comp) {
       if (comp.autoWeekday) {
-        const btn = document.createElement('button');
+        var btn = document.createElement('button');
         btn.className = 'btn btn-auto';
-        btn.innerText = `⚡ ${comp.name} 平日一括`;
-        btn.onclick = () => window.autoFill(comp.id, 'weekday');
+        btn.innerText = '⚡ ' + comp.name + ' 平日一括';
+        btn.onclick = function() { autoFill(comp.id, 'weekday'); };
         container.appendChild(btn);
       }
       if (comp.autoWeekend) {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-auto';
-        btn.innerText = `⚡ ${comp.name} 土日一括`;
-        btn.onclick = () => window.autoFill(comp.id, 'weekend');
-        container.appendChild(btn);
+        var btn2 = document.createElement('button');
+        btn2.className = 'btn btn-auto';
+        btn2.innerText = '⚡ ' + comp.name + ' 土日一括';
+        btn2.onclick = function() { autoFill(comp.id, 'weekend'); };
+        container.appendChild(btn2);
       }
     });
-  };
+  }
 
-  window.renderCalendar = function() {
-    const titleEl = document.getElementById('monthTitle');
-    if (titleEl) titleEl.innerText = `${currentYear}年 ${currentMonth + 1}月`;
-    const cal = document.getElementById('calendar');
+  function renderCalendar() {
+    var titleEl = document.getElementById('monthTitle');
+    if (titleEl) titleEl.innerText = currentYear + '年 ' + (currentMonth + 1) + '月';
+    var cal = document.getElementById('calendar');
     if (!cal) return;
     
-    const cells = cal.querySelectorAll('.day-cell');
-    cells.forEach(c => c.remove());
+    var cells = cal.querySelectorAll('.day-cell');
+    for (var i = 0; i < cells.length; i++) {
+      cells[i].remove();
+    }
 
-    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-    const offset = (firstDay + 6) % 7;
-    const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+    var firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    var offset = (firstDay + 6) % 7;
+    var lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-    for (let i = 0; i < offset; i++) {
-      const empty = document.createElement('div');
+    for (var o = 0; o < offset; o++) {
+      var empty = document.createElement('div');
       empty.className = 'day-cell empty';
       cal.appendChild(empty);
     }
 
-    for (let d = 1; d <= lastDate; d++) {
-      const cell = document.createElement('div');
-      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
-      
-      const isAutoHoliday = !!HOLIDAYS[dateKey];
-      const data = shiftData[dateKey];
-      const isCustomHoliday = (data && data.isHoliday !== undefined) ? data.isHoliday : isAutoHoliday;
+    for (var d = 1; d <= lastDate; d++) {
+      (function(dayNum) {
+        var cell = document.createElement('div');
+        var mStr = (currentMonth + 1 < 10 ? '0' : '') + (currentMonth + 1);
+        var dStr = (dayNum < 10 ? '0' : '') + dayNum;
+        var dateKey = currentYear + '-' + mStr + '-' + dStr;
+        var dayOfWeek = new Date(currentYear, currentMonth, dayNum).getDay();
+        
+        var isAutoHoliday = !!HOLIDAYS[dateKey];
+        var data = shiftData[dateKey];
+        var isCustomHoliday = (data && data.isHoliday !== undefined) ? data.isHoliday : isAutoHoliday;
 
-      let classList = ['day-cell'];
-      if (dayOfWeek === 6) classList.push('sat');
-      if (dayOfWeek === 0) classList.push('sun');
-      if (isCustomHoliday) classList.push('holiday');
-      cell.className = classList.join(' ');
-      cell.onclick = () => window.openModal(dateKey, d, isAutoHoliday);
+        var classList = ['day-cell'];
+        if (dayOfWeek === 6) classList.push('sat');
+        if (dayOfWeek === 0) classList.push('sun');
+        if (isCustomHoliday) classList.push('holiday');
+        cell.className = classList.join(' ');
+        cell.onclick = function() { openModal(dateKey, dayNum, isAutoHoliday); };
 
-      const dayTop = document.createElement('div');
-      dayTop.className = 'day-top';
+        var dayTop = document.createElement('div');
+        dayTop.className = 'day-top';
 
-      const dayNum = document.createElement('div');
-      dayNum.className = 'day-num';
-      dayNum.innerText = d;
-      dayTop.appendChild(dayNum);
+        var dayNumDiv = document.createElement('div');
+        dayNumDiv.className = 'day-num';
+        dayNumDiv.innerText = dayNum;
+        dayTop.appendChild(dayNumDiv);
 
-      if (isAutoHoliday) {
-        const holiTag = document.createElement('div');
-        holiTag.className = 'holiday-tag';
-        holiTag.innerText = HOLIDAYS[dateKey];
-        dayTop.appendChild(holiTag);
-      }
-      cell.appendChild(dayTop);
-
-      const badgeList = document.createElement('div');
-      badgeList.className = 'badge-list';
-
-      if (data) {
-        if (data.event) {
-          const b = document.createElement('div');
-          b.className = 'badge badge-event';
-          b.innerText = data.event;
-          badgeList.appendChild(b);
+        if (isAutoHoliday) {
+          var holiTag = document.createElement('div');
+          holiTag.className = 'holiday-tag';
+          holiTag.innerText = HOLIDAYS[dateKey];
+          dayTop.appendChild(holiTag);
         }
-        if (data.companies) {
-          config.companies.forEach(comp => {
-            const cData = data.companies[comp.id];
-            if (cData && cData.checked) {
-              const b = document.createElement('div');
-              b.className = 'badge';
-              b.style.backgroundColor = comp.color || '#3b82f6';
-              if (comp.payType === 'full') {
-                b.innerText = comp.name;
-              } else {
-                b.innerText = `${comp.name} ${cData.hours !== undefined ? cData.hours : (comp.defaultHours || 0)}h`;
+        cell.appendChild(dayTop);
+
+        var badgeList = document.createElement('div');
+        badgeList.className = 'badge-list';
+
+        if (data) {
+          if (data.event) {
+            var bEvent = document.createElement('div');
+            bEvent.className = 'badge badge-event';
+            bEvent.innerText = data.event;
+            badgeList.appendChild(bEvent);
+          }
+          if (data.companies) {
+            config.companies.forEach(function(comp) {
+              var cData = data.companies[comp.id];
+              if (cData && cData.checked) {
+                var bComp = document.createElement('div');
+                bComp.className = 'badge';
+                bComp.style.backgroundColor = comp.color || '#3b82f6';
+                if (comp.payType === 'full') {
+                  bComp.innerText = comp.name;
+                } else {
+                  var h = cData.hours !== undefined ? cData.hours : (comp.defaultHours || 0);
+                  bComp.innerText = comp.name + ' ' + h + 'h';
+                }
+                badgeList.appendChild(bComp);
               }
-              badgeList.appendChild(b);
-            }
-          });
+            });
+          }
+          if (data.allowance > 0) {
+            var bAll = document.createElement('div');
+            bAll.className = 'badge badge-allowance';
+            bAll.innerText = data.allowanceNote ? data.allowanceNote : '+' + data.allowance.toLocaleString();
+            badgeList.appendChild(bAll);
+          }
         }
-        if (data.allowance > 0) {
-          const b = document.createElement('div');
-          b.className = 'badge badge-allowance';
-          b.innerText = data.allowanceNote ? `${data.allowanceNote}` : `+${data.allowance.toLocaleString()}`;
-          badgeList.appendChild(b);
-        }
-      }
 
-      cell.appendChild(badgeList);
-      cal.appendChild(cell);
+        cell.appendChild(badgeList);
+        cal.appendChild(cell);
+      })(d);
     }
-  };
+  }
 
-  window.openModal = function(dateKey, day, isAutoHoliday) {
+  function openModal(dateKey, day, isAutoHoliday) {
     selectedDateKey = dateKey;
-    document.getElementById('modalDateTitle').innerText = `${currentMonth + 1}月 ${day}日の設定`;
+    document.getElementById('modalDateTitle').innerText = (currentMonth + 1) + '月 ' + day + '日の設定';
     
-    const data = shiftData[dateKey] || { companies: {} };
-    const compContainer = document.getElementById('modalCompanyList');
+    var data = shiftData[dateKey] || { companies: {} };
+    var compContainer = document.getElementById('modalCompanyList');
     compContainer.innerHTML = '';
 
-    config.companies.forEach(comp => {
-      const cData = (data.companies && data.companies[comp.id]) ? data.companies[comp.id] : {};
-      const rate = getAppliedRate(comp, dateKey);
+    config.companies.forEach(function(comp) {
+      var cData = (data.companies && data.companies[comp.id]) ? data.companies[comp.id] : {};
+      var rate = getAppliedRate(comp, dateKey);
 
-      const box = document.createElement('div');
+      var box = document.createElement('div');
       box.className = 'form-group';
       box.style.background = '#f8fafc';
       box.style.border = '1px solid #e2e8f0';
       box.style.borderRadius = '8px';
       box.style.padding = '8px';
 
-      let rateText = "";
+      var rateText = "";
       if (comp.payType === 'full') {
-        rateText = `月給: ${rate.monthlySalary.toLocaleString()}円`;
+        rateText = '月給: ' + rate.monthlySalary.toLocaleString() + '円';
       } else {
-        const dailyEstimate = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
-        rateText = `時給: ${rate.hourly.toLocaleString()}円 / 交通費: ${rate.transit.toLocaleString()}円 (日当換算 約${dailyEstimate.toLocaleString()}円)`;
+        var dailyEstimate = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
+        rateText = '時給: ' + rate.hourly.toLocaleString() + '円 / 交通費: ' + rate.transit.toLocaleString() + '円 (日当換算 約' + dailyEstimate.toLocaleString() + '円)';
       }
 
-      box.innerHTML = `
-        <label class="checkbox-label" style="font-weight:600;">
-          <input type="checkbox" id="modal_comp_check_${comp.id}" ${cData.checked ? 'checked' : ''} style="width:16px;height:16px;">
-          <span style="color:${comp.color || '#1e293b'}">${comp.name} 出勤</span>
-        </label>
-        <div style="font-size:10px; color:#64748b; margin:2px 0 6px 22px;">${rateText}</div>
-        ${comp.payType === 'part' ? `
-          <div style="display:flex; align-items:center; gap:6px; margin-left:22px;">
-            <span style="font-size:11px; color:#475569;">勤務時間:</span>
-            <input type="number" id="modal_comp_hours_${comp.id}" class="form-input" style="width:80px; padding:4px 6px;" value="${cData.hours !== undefined ? cData.hours : (comp.defaultHours || 0)}" min="0" step="0.5">
-            <span style="font-size:11px; color:#475569;">時間</span>
-          </div>
-        ` : ''}
-      `;
+      var hoursVal = cData.hours !== undefined ? cData.hours : (comp.defaultHours || 0);
+      box.innerHTML = 
+        '<label class="checkbox-label" style="font-weight:600;">' +
+          '<input type="checkbox" id="modal_comp_check_' + comp.id + '" ' + (cData.checked ? 'checked' : '') + ' style="width:16px;height:16px;">' +
+          '<span style="color:' + (comp.color || '#1e293b') + '">' + comp.name + ' 出勤</span>' +
+        '</label>' +
+        '<div style="font-size:10px; color:#64748b; margin:2px 0 6px 22px;">' + rateText + '</div>' +
+        (comp.payType === 'part' ? 
+          '<div style="display:flex; align-items:center; gap:6px; margin-left:22px;">' +
+            '<span style="font-size:11px; color:#475569;">勤務時間:</span>' +
+            '<input type="number" id="modal_comp_hours_' + comp.id + '" class="form-input" style="width:80px; padding:4px 6px;" value="' + hoursVal + '" min="0" step="0.5">' +
+            '<span style="font-size:11px; color:#475569;">時間</span>' +
+          '</div>' : '');
       compContainer.appendChild(box);
     });
 
     document.getElementById('eventNote').value = data.event || '';
     document.getElementById('allowanceAmt').value = data.allowance || '';
     document.getElementById('allowanceNote').value = data.allowanceNote || '';
-    document.getElementById('isHolidayCheck').checked = data.isHoliday !== undefined ? data.isHoliday : isAutoHoliday;
+    document.getElementById('isHolidayCheck').checked = (data.isHoliday !== undefined) ? data.isHoliday : isAutoHoliday;
 
     document.getElementById('modal').style.display = 'flex';
-  };
+  }
 
-  window.closeModal = function() {
+  function closeModal() {
     document.getElementById('modal').style.display = 'none';
-  };
+  }
 
-  window.saveDayData = function() {
-    const companiesData = {};
-    let hasCompanyChecked = false;
+  function saveDayData() {
+    var companiesData = {};
+    var hasCompanyChecked = false;
 
-    config.companies.forEach(comp => {
-      const chk = document.getElementById(`modal_comp_check_${comp.id}`);
-      const hoursEl = document.getElementById(`modal_comp_hours_${comp.id}`);
-      const isChecked = chk ? chk.checked : false;
-      const hours = hoursEl ? parseFloat(hoursEl.value) || 0 : 0;
+    config.companies.forEach(function(comp) {
+      var chk = document.getElementById('modal_comp_check_' + comp.id);
+      var hoursEl = document.getElementById('modal_comp_hours_' + comp.id);
+      var isChecked = chk ? chk.checked : false;
+      var hours = hoursEl ? parseFloat(hoursEl.value) || 0 : 0;
 
       if (isChecked) {
         hasCompanyChecked = true;
@@ -548,41 +551,49 @@
       }
     });
 
-    const event = document.getElementById('eventNote').value.trim();
-    const allowance = parseInt(document.getElementById('allowanceAmt').value, 10) || 0;
-    const allowanceNote = document.getElementById('allowanceNote').value.trim();
-    const isHoliday = document.getElementById('isHolidayCheck').checked;
+    var event = document.getElementById('eventNote').value.trim();
+    var allowance = parseInt(document.getElementById('allowanceAmt').value, 10) || 0;
+    var allowanceNote = document.getElementById('allowanceNote').value.trim();
+    var isHoliday = document.getElementById('isHolidayCheck').checked;
 
     if (!hasCompanyChecked && allowance === 0 && !allowanceNote && !event && !isHoliday) {
       delete shiftData[selectedDateKey];
     } else {
       shiftData[selectedDateKey] = {
         companies: companiesData,
-        event, allowance, allowanceNote, isHoliday
+        event: event,
+        allowance: allowance,
+        allowanceNote: allowanceNote,
+        isHoliday: isHoliday
       };
     }
 
     persistData();
-    window.closeModal();
-    window.renderCalendar();
-    window.updateSummary();
-    window.calculateJidoAllowance();
-  };
+    closeModal();
+    renderCalendar();
+    updateSummary();
+    calculateJidoAllowance();
+  }
 
-  window.autoFill = function(compId, targetType) {
-    const comp = config.companies.find(c => c.id === compId);
+  function autoFill(compId, targetType) {
+    var comp = null;
+    for (var i = 0; i < config.companies.length; i++) {
+      if (config.companies[i].id === compId) comp = config.companies[i];
+    }
     if (!comp) return;
 
-    const label = targetType === 'weekday' ? '平日（月〜金・祝日除く）' : '土曜日・日曜日';
-    if (!confirm(`${currentMonth + 1}月の${label}に「${comp.name}」を一括入力しますか？`)) return;
+    var label = targetType === 'weekday' ? '平日（月〜金・祝日除く）' : '土曜日・日曜日';
+    if (!confirm((currentMonth + 1) + '月の' + label + 'に「' + comp.name + '」を一括入力しますか？')) return;
 
-    const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
-    for (let d = 1; d <= lastDate; d++) {
-      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
-      const isHoliday = !!HOLIDAYS[dateKey];
+    var lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+    for (var d = 1; d <= lastDate; d++) {
+      var mStr = (currentMonth + 1 < 10 ? '0' : '') + (currentMonth + 1);
+      var dStr = (d < 10 ? '0' : '') + d;
+      var dateKey = currentYear + '-' + mStr + '-' + dStr;
+      var dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
+      var isHoliday = !!HOLIDAYS[dateKey];
 
-      let match = false;
+      var match = false;
       if (targetType === 'weekday') {
         match = (dayOfWeek !== 0 && dayOfWeek !== 6 && !isHoliday);
       } else {
@@ -592,26 +603,23 @@
       if (match) {
         if (!shiftData[dateKey]) shiftData[dateKey] = { companies: {} };
         if (!shiftData[dateKey].companies) shiftData[dateKey].companies = {};
-        
-        shiftData[dateKey].companies[comp.id] = {
-          checked: true,
-          hours: comp.defaultHours || 0
-        };
+        shiftData[dateKey].companies[comp.id] = { checked: true, hours: comp.defaultHours || 0 };
       }
     }
 
     persistData();
-    window.renderCalendar();
-    window.updateSummary();
-    window.calculateJidoAllowance();
-  };
+    renderCalendar();
+    updateSummary();
+    calculateJidoAllowance();
+  }
 
-  window.updateSummary = function() {
-    const currentYM = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-    let allowanceTotal = 0;
-    const compSummary = {};
+  function updateSummary() {
+    var mStr = (currentMonth + 1 < 10 ? '0' : '') + (currentMonth + 1);
+    var currentYM = currentYear + '-' + mStr;
+    var allowanceTotal = 0;
+    var compSummary = {};
 
-    config.companies.forEach(c => {
+    config.companies.forEach(function(c) {
       compSummary[c.id] = {
         name: c.name,
         color: c.color,
@@ -624,19 +632,19 @@
       };
     });
 
-    for (const [key, val] of Object.entries(shiftData)) {
-      if (key.startsWith(currentYM)) {
+    for (var key in shiftData) {
+      if (key.indexOf(currentYM) === 0) {
+        var val = shiftData[key];
         if (val.allowance) allowanceTotal += val.allowance;
         if (val.companies) {
-          config.companies.forEach(comp => {
-            const cd = val.companies[comp.id];
+          config.companies.forEach(function(comp) {
+            var cd = val.companies[comp.id];
             if (cd && cd.checked) {
               compSummary[comp.id].days++;
-              const h = (cd.hours !== undefined) ? cd.hours : (comp.defaultHours || 0);
+              var h = (cd.hours !== undefined) ? cd.hours : (comp.defaultHours || 0);
               compSummary[comp.id].totalHours += h;
-              
               if (comp.payType === 'part') {
-                const r = compSummary[comp.id].rate;
+                var r = compSummary[comp.id].rate;
                 compSummary[comp.id].gross += (r.hourly * h) + (r.transit || 0);
               }
             }
@@ -645,50 +653,51 @@
       }
     }
 
-    let overallNet = allowanceTotal;
-    const container = document.getElementById('dashboardContainer');
+    var overallNet = allowanceTotal;
+    var container = document.getElementById('dashboardContainer');
     if (!container) return;
     container.innerHTML = '';
 
-    const totalCard = document.createElement('div');
+    var totalCard = document.createElement('div');
     totalCard.className = 'card';
-    totalCard.innerHTML = `
-      <div class="card-title">当月 実入金手取り</div>
-      <div class="card-val total-val" id="totalNetVal">0円</div>
-      <div class="card-sub">給料＋手当 合算</div>
-    `;
+    totalCard.innerHTML = 
+      '<div class="card-title">当月 実入金手取り</div>' +
+      '<div class="card-val total-val" id="totalNetVal">0円</div>' +
+      '<div class="card-sub">給料＋手当 合算</div>';
     container.appendChild(totalCard);
 
-    config.companies.forEach(comp => {
-      const sum = compSummary[comp.id];
+    config.companies.forEach(function(comp) {
+      var sum = compSummary[comp.id];
       if (comp.payType === 'full') {
         sum.gross = sum.days > 0 ? sum.rate.monthlySalary : 0;
       }
       sum.net = Math.round(sum.gross * ((comp.netRate || 100) / 100));
       overallNet += sum.net;
 
-      const card = document.createElement('div');
+      var card = document.createElement('div');
       card.className = 'card';
-      card.innerHTML = `
-        <div class="card-title" style="color:${comp.color || '#334155'}; font-weight:bold;">${comp.name} 手取り</div>
-        <div class="card-val">${sum.net.toLocaleString()}円</div>
-        <div class="card-sub">${comp.payType === 'full' ? `出勤: ${sum.days}日 (総額: ${sum.gross.toLocaleString()}円)` : `出勤: ${sum.days}日 / ${sum.totalHours}h (総額: ${sum.gross.toLocaleString()}円)`}</div>
-      `;
+      var subText = comp.payType === 'full' ? 
+        ('出勤: ' + sum.days + '日 (総額: ' + sum.gross.toLocaleString() + '円)') :
+        ('出勤: ' + sum.days + '日 / ' + sum.totalHours + 'h (総額: ' + sum.gross.toLocaleString() + '円)');
+
+      card.innerHTML = 
+        '<div class="card-title" style="color:' + (comp.color || '#334155') + '; font-weight:bold;">' + comp.name + ' 手取り</div>' +
+        '<div class="card-val">' + sum.net.toLocaleString() + '円</div>' +
+        '<div class="card-sub">' + subText + '</div>';
       container.appendChild(card);
     });
 
-    const allCard = document.createElement('div');
+    var allCard = document.createElement('div');
     allCard.className = 'card';
-    allCard.innerHTML = `
-      <div class="card-title">手当・養育費</div>
-      <div class="card-val">${allowanceTotal.toLocaleString()}円</div>
-      <div class="card-sub">児童手当・養育費など</div>
-    `;
+    allCard.innerHTML = 
+      '<div class="card-title">手当・養育費</div>' +
+      '<div class="card-val">' + allowanceTotal.toLocaleString() + '円</div>' +
+      '<div class="card-sub">児童手当・養育費など</div>';
     container.appendChild(allCard);
 
-    const totalNetEl = document.getElementById('totalNetVal');
-    if (totalNetEl) totalNetEl.innerText = `${overallNet.toLocaleString()}円`;
-  };
+    var totalNetEl = document.getElementById('totalNetVal');
+    if (totalNetEl) totalNetEl.innerText = overallNet.toLocaleString() + '円';
+  }
 
   function getEmploymentIncomeDeduction(gross) {
     if (gross <= 550000) return gross;
@@ -700,63 +709,70 @@
     return 1950000;
   }
 
-  window.calculateJidoAllowance = function() {
-    let calendarSalary = 0;
-    let calendarChildSupport = 0;
-    const yearPrefix = `${currentYear}-`;
+  function calculateJidoAllowance() {
+    var calendarSalary = 0;
+    var calendarChildSupport = 0;
+    var yearPrefix = currentYear + '-';
 
-    for (const [key, val] of Object.entries(shiftData)) {
-      if (key.startsWith(yearPrefix)) {
+    for (var key in shiftData) {
+      if (key.indexOf(yearPrefix) === 0) {
+        var val = shiftData[key];
         if (val.companies) {
-          config.companies.forEach(comp => {
-            const cd = val.companies[comp.id];
+          config.companies.forEach(function(comp) {
+            var cd = val.companies[comp.id];
             if (cd && cd.checked) {
-              const rate = getAppliedRate(comp, key);
+              var rate = getAppliedRate(comp, key);
               if (comp.payType === 'part') {
-                const h = (cd.hours !== undefined) ? cd.hours : (comp.defaultHours || 0);
+                var h = (cd.hours !== undefined) ? cd.hours : (comp.defaultHours || 0);
                 calendarSalary += (rate.hourly * h) + (rate.transit || 0);
               }
             }
           });
         }
-        if (val.allowance && val.allowanceNote && val.allowanceNote.includes("養育")) {
+        if (val.allowance && val.allowanceNote && val.allowanceNote.indexOf("養育") !== -1) {
           calendarChildSupport += val.allowance;
         }
       }
     }
 
-    config.companies.filter(c => c.payType === 'full').forEach(comp => {
-      for (let m = 1; m <= 12; m++) {
-        const ym = `${currentYear}-${String(m).padStart(2, '0')}`;
-        const hasWorked = Object.keys(shiftData).some(k => k.startsWith(ym) && shiftData[k].companies && shiftData[k].companies[comp.id] && shiftData[k].companies[comp.id].checked);
+    config.companies.filter(function(c) { return c.payType === 'full'; }).forEach(function(comp) {
+      for (var m = 1; m <= 12; m++) {
+        var ym = currentYear + '-' + (m < 10 ? '0' : '') + m;
+        var hasWorked = false;
+        for (var k in shiftData) {
+          if (k.indexOf(ym) === 0 && shiftData[k].companies && shiftData[k].companies[comp.id] && shiftData[k].companies[comp.id].checked) {
+            hasWorked = true;
+            break;
+          }
+        }
         if (hasWorked) {
-          const rate = getAppliedRate(comp, ym);
+          var rate = getAppliedRate(comp, ym);
           calendarSalary += rate.monthlySalary;
         }
       }
     });
 
-    const annualGrossSalary = calendarSalary;
-    const employmentDeduction = getEmploymentIncomeDeduction(annualGrossSalary);
-    const salaryIncome = Math.max(0, annualGrossSalary - employmentDeduction);
+    var annualGrossSalary = calendarSalary;
+    var employmentDeduction = getEmploymentIncomeDeduction(annualGrossSalary);
+    var salaryIncome = Math.max(0, annualGrossSalary - employmentDeduction);
 
-    const annualChildSupport = Math.max(calendarChildSupport, config.annualChildSupport || 480000);
-    const childSupportAdded = Math.round(annualChildSupport * 0.80);
+    var annualChildSupport = Math.max(calendarChildSupport, config.annualChildSupport || 480000);
+    var childSupportAdded = Math.round(annualChildSupport * 0.80);
 
-    const calculatedIncome = Math.max(0, salaryIncome + childSupportAdded - 80000 - (config.otherDeductions || 0));
+    var calculatedIncome = Math.max(0, salaryIncome + childSupportAdded - 80000 - (config.otherDeductions || 0));
 
-    const limitFull = 870000 + (config.childrenCount - 1) * 380000;
-    const limitPartial = 2300000 + (config.childrenCount - 1) * 380000;
+    var limitFull = 870000 + (config.childrenCount - 1) * 380000;
+    var limitPartial = 2300000 + (config.childrenCount - 1) * 380000;
 
-    const baseFullAmt = 45500;
-    let monthlyEstimate = 0;
-    let statusText = "";
+    var baseFullAmt = 45500;
+    var monthlyEstimate = 0;
+    var statusText = "";
 
     if (calculatedIncome <= limitFull) {
       monthlyEstimate = baseFullAmt;
       statusText = "全部支給";
     } else if (calculatedIncome < limitPartial) {
-      const deductionFromFull = (calculatedIncome - limitFull) * 0.0243007;
+      var deductionFromFull = (calculatedIncome - limitFull) * 0.0243007;
       monthlyEstimate = Math.max(10740, Math.round((45490 - deductionFromFull) / 10) * 10);
       statusText = "一部支給";
     } else {
@@ -764,150 +780,134 @@
       statusText = "支給停止（上限超過）";
     }
 
-    const jidoMonthlyEl = document.getElementById('jidoMonthlyEstimate');
+    var jidoMonthlyEl = document.getElementById('jidoMonthlyEstimate');
     if (jidoMonthlyEl) {
-      jidoMonthlyEl.innerText = monthlyEstimate > 0 ? `${statusText}  約 ${monthlyEstimate.toLocaleString()}円 / 月` : statusText;
-      document.getElementById('jidoAnnualSalary').innerText = `年間給与見込: 約 ${Math.round(annualGrossSalary).toLocaleString()}円`;
-      document.getElementById('jidoAnnualChildSupport').innerText = `年間養育費: ${annualChildSupport.toLocaleString()}円 (算入: ${childSupportAdded.toLocaleString()}円)`;
-      document.getElementById('jidoCalculatedIncome').innerText = `判定所得額: ${calculatedIncome.toLocaleString()}円`;
-      document.getElementById('jidoStatus').innerText = `区分: ${statusText}`;
+      jidoMonthlyEl.innerText = monthlyEstimate > 0 ? (statusText + '  約 ' + monthlyEstimate.toLocaleString() + '円 / 月') : statusText;
+      document.getElementById('jidoAnnualSalary').innerText = '年間給与見込: 約 ' + Math.round(annualGrossSalary).toLocaleString() + '円';
+      document.getElementById('jidoAnnualChildSupport').innerText = '年間養育費: ' + annualChildSupport.toLocaleString() + '円 (算入: ' + childSupportAdded.toLocaleString() + '円)';
+      document.getElementById('jidoCalculatedIncome').innerText = '判定所得額: ' + calculatedIncome.toLocaleString() + '円';
+      document.getElementById('jidoStatus').innerText = '区分: ' + statusText;
     }
-  };
+  }
 
-  window.renderCompanySettingsUI = function() {
-    const container = document.getElementById('companySettingsContainer');
+  function renderCompanySettingsUI() {
+    var container = document.getElementById('companySettingsContainer');
     if (!container) return;
     container.innerHTML = '';
 
-    config.companies.forEach((comp, cIdx) => {
-      const card = document.createElement('div');
+    config.companies.forEach(function(comp, cIdx) {
+      var card = document.createElement('div');
       card.className = 'company-card';
 
-      let tiersHtml = '';
-      comp.history.slice().sort((a, b) => a.startYM.localeCompare(b.startYM)).forEach((tier, tIdx) => {
-        tiersHtml += `
-          <div class="tier-box">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <span style="font-size:11px; font-weight:bold;">適用開始年月: 
-                <input type="month" class="form-input" style="width:auto; padding:2px 4px; display:inline-block; font-size:11px;" value="${tier.startYM}" onchange="updateCompTier(${cIdx}, ${tIdx}, 'startYM', this.value)">
-              </span>
-              ${comp.history.length > 1 ? `<button class="btn" style="padding:1px 5px; font-size:9px; color:#ef4444;" onclick="deleteCompTier(${cIdx},${tIdx})">削除</button>` : ''}
-            </div>
-            ${comp.payType === 'part' ? `
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                <div>
-                  <label class="form-label">時給 (円)</label>
-                  <input type="number" class="form-input" value="${tier.hourly || 0}" onchange="updateCompTier(${cIdx},${tIdx}, 'hourly', this.value)">
-                </div>
-                <div>
-                  <label class="form-label">交通費日額 (円)</label>
-                  <input type="number" class="form-input" value="${tier.transit || 0}" onchange="updateCompTier(${cIdx},${tIdx}, 'transit', this.value)">
-                </div>
-              </div>
-            ` : `
-              <div>
-                <label class="form-label">月額固定給（基本給＋手当 / 円）</label>
-                <input type="number" class="form-input" value="${tier.monthlySalary || 0}" onchange="updateCompTier(${cIdx},${tIdx}, 'monthlySalary', this.value)">
-              </div>
-            `}
-          </div>
-        `;
+      var tiersHtml = '';
+      comp.history.slice().sort(function(a, b) { return a.startYM.localeCompare(b.startYM); }).forEach(function(tier, tIdx) {
+        tiersHtml += 
+          '<div class="tier-box">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
+              '<span style="font-size:11px; font-weight:bold;">適用開始年月: ' +
+                '<input type="month" class="form-input" style="width:auto; padding:2px 4px; display:inline-block; font-size:11px;" value="' + tier.startYM + '" onchange="updateCompTier(' + cIdx + ', ' + tIdx + ', \'startYM\', this.value)">' +
+              '</span>' +
+              (comp.history.length > 1 ? '<button class="btn" style="padding:1px 5px; font-size:9px; color:#ef4444;" onclick="deleteCompTier(' + cIdx + ', ' + tIdx + ')">削除</button>' : '') +
+            '</div>' +
+            (comp.payType === 'part' ? 
+              ('<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">' +
+                '<div><label class="form-label">時給 (円)</label><input type="number" class="form-input" value="' + (tier.hourly || 0) + '" onchange="updateCompTier(' + cIdx + ', ' + tIdx + ', \'hourly\', this.value)"></div>' +
+                '<div><label class="form-label">交通費日額 (円)</label><input type="number" class="form-input" value="' + (tier.transit || 0) + '" onchange="updateCompTier(' + cIdx + ', ' + tIdx + ', \'transit\', this.value)"></div>' +
+              '</div>') : 
+              ('<div><label class="form-label">月額固定給（基本給＋手当 / 円）</label><input type="number" class="form-input" value="' + (tier.monthlySalary || 0) + '" onchange="updateCompTier(' + cIdx + ', ' + tIdx + ', \'monthlySalary\', this.value)"></div>')
+            ) +
+          '</div>';
       });
 
-      card.innerHTML = `
-        <div class="company-card-header">
-          <input type="text" class="form-input" style="font-weight:bold; width:65%; font-size:13px;" value="${comp.name}" placeholder="会社名" onchange="updateCompField(${cIdx}, 'name', this.value)">
-          ${config.companies.length > 1 ? `<button class="btn" style="padding:2px 6px; font-size:10px; color:#ef4444;" onclick="deleteCompany(${cIdx})">削除</button>` : ''}
-        </div>
+      card.innerHTML = 
+        '<div class="company-card-header">' +
+          '<input type="text" class="form-input" style="font-weight:bold; width:65%; font-size:13px;" value="' + comp.name + '" placeholder="会社名" onchange="updateCompField(' + cIdx + ', \'name\', this.value)">' +
+          (config.companies.length > 1 ? '<button class="btn" style="padding:2px 6px; font-size:10px; color:#ef4444;" onclick="deleteCompany(' + cIdx + ')">削除</button>' : '') +
+        '</div>' +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">' +
+          '<div>' +
+            '<label class="form-label">給与形態</label>' +
+            '<select class="form-input" onchange="updateCompField(' + cIdx + ', \'payType\', this.value)">' +
+              '<option value="part" ' + (comp.payType === 'part' ? 'selected' : '') + '>パート・アルバイト (時給)</option>' +
+              '<option value="full" ' + (comp.payType === 'full' ? 'selected' : '') + '>正社員 (固定月給)</option>' +
+            '</select>' +
+          '</div>' +
+          '<div>' +
+            '<label class="form-label">手取り率目安 (%)</label>' +
+            '<input type="number" class="form-input" value="' + (comp.netRate || 100) + '" onchange="updateCompField(' + cIdx + ', \'netRate\', this.value)">' +
+          '</div>' +
+        '</div>' +
+        (comp.payType === 'part' ? 
+          ('<div class="form-group">' +
+            '<label class="form-label">標準勤務時間 (時間/日)</label>' +
+            '<input type="number" class="form-input" value="' + (comp.defaultHours || 0) + '" step="0.5" onchange="updateCompField(' + cIdx + ', \'defaultHours\', this.value)">' +
+          '</div>') : '') +
+        '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:6px; margin-bottom:8px;">' +
+          '<div style="font-size:10.5px; font-weight:bold; color:#475569; margin-bottom:4px;">一括投入ボタンの表示設定</div>' +
+          '<div style="display:flex; gap:12px;">' +
+            '<label class="checkbox-label" style="font-size:11px;">' +
+              '<input type="checkbox" ' + (comp.autoWeekday ? 'checked' : '') + ' onchange="updateCompField(' + cIdx + ', \'autoWeekday\', this.checked)">' +
+              '平日一括を有効' +
+            '</label>' +
+            '<label class="checkbox-label" style="font-size:11px;">' +
+              '<input type="checkbox" ' + (comp.autoWeekend ? 'checked' : '') + ' onchange="updateCompField(' + cIdx + ', \'autoWeekend\', this.checked)">' +
+              '土日一括を有効' +
+            '</label>' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-top:8px;">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+            '<span style="font-size:11px; font-weight:bold; color:var(--primary);">■ 昇給・改定履歴</span>' +
+            '<button class="btn btn-primary" style="padding:2px 6px; font-size:9px;" onclick="addCompTier(' + cIdx + ')">＋ 改定・昇給を追加</button>' +
+          '</div>' +
+          tiersHtml +
+        '</div>';
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
-          <div>
-            <label class="form-label">給与形態</label>
-            <select class="form-input" onchange="updateCompField(${cIdx}, 'payType', this.value)">
-              <option value="part" ${comp.payType === 'part' ? 'selected' : ''}>パート・アルバイト (時給)</option>
-              <option value="full" ${comp.payType === 'full' ? 'selected' : ''}>正社員 (固定月給)</option>
-            </select>
-          </div>
-          <div>
-            <label class="form-label">手取り率目安 (%)</label>
-            <input type="number" class="form-input" value="${comp.netRate || 100}" onchange="updateCompField(${cIdx}, 'netRate', this.value)">
-          </div>
-        </div>
-
-        ${comp.payType === 'part' ? `
-          <div class="form-group">
-            <label class="form-label">標準勤務時間 (時間/日)</label>
-            <input type="number" class="form-input" value="${comp.defaultHours \vert{}\vert{} 0}" step="0.5" onchange="updateCompField(${cIdx}, 'defaultHours', this.value)">
-          </div>
-        ` : ''}
-
-        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:6px; margin-bottom:8px;">
-          <div style="font-size:10.5px; font-weight:bold; color:#475569; margin-bottom:4px;">一括投入ボタンの表示設定</div>
-          <div style="display:flex; gap:12px;">
-            <label class="checkbox-label" style="font-size:11px;">
-              <input type="checkbox" ${comp.autoWeekday ? 'checked' : ''} onchange="updateCompField(${cIdx}, 'autoWeekday', this.checked)">
-              平日一括を有効
-            </label>
-            <label class="checkbox-label" style="font-size:11px;">
-              <input type="checkbox" ${comp.autoWeekend ? 'checked' : ''} onchange="updateCompField(${cIdx}, 'autoWeekend', this.checked)">
-              土日一括を有効
-            </label>
-          </div>
-        </div>
-
-        <div style="margin-top:8px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:11px; font-weight:bold; color:var(--primary);">■ 昇給・改定履歴</span>
-            <button class="btn btn-primary" style="padding:2px 6px; font-size:9px;" onclick="addCompTier(${cIdx})">＋ 改定・昇給を追加</button>
-          </div>
-          ${tiersHtml}
-        </div>
-      `;
       container.appendChild(card);
     });
-  };
+  }
 
-  window.updateCompField = function(cIdx, field, val) {
+  function updateCompField(cIdx, field, val) {
     if (field === 'netRate' || field === 'defaultHours') {
       config.companies[cIdx][field] = parseFloat(val) || 0;
     } else {
       config.companies[cIdx][field] = val;
     }
-    window.renderCompanySettingsUI();
-  };
+    renderCompanySettingsUI();
+  }
 
-  window.updateCompTier = function(cIdx, tIdx, field, val) {
+  function updateCompTier(cIdx, tIdx, field, val) {
     if (field === 'hourly' || field === 'transit' || field === 'monthlySalary') {
       config.companies[cIdx].history[tIdx][field] = parseInt(val, 10) || 0;
     } else {
       config.companies[cIdx].history[tIdx][field] = val;
     }
-  };
+  }
 
-  window.addCompTier = function(cIdx) {
-    const comp = config.companies[cIdx];
-    const lastTier = comp.history[comp.history.length - 1] || { hourly: 1200, transit: 0, monthlySalary: 200000 };
+  function addCompTier(cIdx) {
+    var comp = config.companies[cIdx];
+    var lastTier = comp.history[comp.history.length - 1] || { hourly: 1200, transit: 0, monthlySalary: 200000 };
     comp.history.push({
       startYM: "2026-10",
       hourly: lastTier.hourly || 0,
       transit: lastTier.transit || 0,
       monthlySalary: lastTier.monthlySalary || 0
     });
-    window.renderCompanySettingsUI();
-  };
+    renderCompanySettingsUI();
+  }
 
-  window.deleteCompTier = function(cIdx, tIdx) {
+  function deleteCompTier(cIdx, tIdx) {
     if (config.companies[cIdx].history.length <= 1) return;
     config.companies[cIdx].history.splice(tIdx, 1);
-    window.renderCompanySettingsUI();
-  };
+    renderCompanySettingsUI();
+  }
 
-  window.addNewCompany = function() {
-    const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
-    const newId = "comp_" + Date.now();
+  function addNewCompany() {
+    var colors = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
+    var newId = "c_" + Date.now();
     config.companies.push({
       id: newId,
-      name: `会社 ${config.companies.length + 1}`,
+      name: "会社 " + (config.companies.length + 1),
       color: colors[config.companies.length % colors.length],
       payType: "part",
       netRate: 85,
@@ -918,116 +918,115 @@
         { startYM: "2026-01", hourly: 1200, transit: 0, monthlySalary: 0 }
       ]
     });
-    window.renderCompanySettingsUI();
-  };
+    renderCompanySettingsUI();
+  }
 
-  window.deleteCompany = function(cIdx) {
+  function deleteCompany(cIdx) {
     if (config.companies.length <= 1) {
-      alert("勤務先は最低1つ必要です。");
+      alert("会社は最低1つ必要です。");
       return;
     }
-    if (confirm(`「${config.companies[cIdx].name}」を削除しますか？`)) {
+    if (confirm("「" + config.companies[cIdx].name + "」を削除しますか？")) {
       config.companies.splice(cIdx, 1);
-      window.renderCompanySettingsUI();
+      renderCompanySettingsUI();
     }
-  };
+  }
 
-  window.openCompanySettingsModal = function() {
-    window.renderCompanySettingsUI();
+  function openCompanySettingsModal() {
+    renderCompanySettingsUI();
     document.getElementById('companySettingsModal').style.display = 'flex';
-  };
-  window.closeCompanySettingsModal = function() {
+  }
+  function closeCompanySettingsModal() {
     document.getElementById('companySettingsModal').style.display = 'none';
-  };
+  }
 
-  window.saveCompanySettings = function() {
+  function saveCompanySettings() {
     persistData();
-    window.closeCompanySettingsModal();
-    window.renderControls();
-    window.renderCalendar();
-    window.updateSummary();
-    window.calculateJidoAllowance();
-    alert('勤務先・給与設定を保存しました');
-  };
+    closeCompanySettingsModal();
+    renderControls();
+    renderCalendar();
+    updateSummary();
+    calculateJidoAllowance();
+    alert('設定を保存しました');
+  }
 
-  window.openJidoSettingsModal = function() {
+  function openJidoSettingsModal() {
     document.getElementById('cfgAnnualChildSupport').value = config.annualChildSupport || 480000;
     document.getElementById('cfgChildrenCount').value = config.childrenCount || 1;
     document.getElementById('cfgOtherDeductions').value = config.otherDeductions || 0;
     document.getElementById('jidoSettingsModal').style.display = 'flex';
-  };
-  window.closeJidoSettingsModal = function() {
+  }
+  function closeJidoSettingsModal() {
     document.getElementById('jidoSettingsModal').style.display = 'none';
-  };
-  window.saveJidoSettings = function() {
+  }
+  function saveJidoSettings() {
     config.annualChildSupport = parseInt(document.getElementById('cfgAnnualChildSupport').value, 10) || 480000;
     config.childrenCount = parseInt(document.getElementById('cfgChildrenCount').value, 10) || 1;
     config.otherDeductions = parseInt(document.getElementById('cfgOtherDeductions').value, 10) || 0;
     persistData();
-    window.closeJidoSettingsModal();
-    window.calculateJidoAllowance();
+    closeJidoSettingsModal();
+    calculateJidoAllowance();
     alert('手当設定を更新しました');
-  };
+  }
 
-  window.openDataModal = function() { document.getElementById('dataModal').style.display = 'flex'; };
-  window.closeDataModal = function() { document.getElementById('dataModal').style.display = 'none'; };
+  function openDataModal() { document.getElementById('dataModal').style.display = 'flex'; }
+  function closeDataModal() { document.getElementById('dataModal').style.display = 'none'; }
 
-  window.exportDataToFile = function() {
-    const payload = { version: "standalone_v1", shiftData: shiftData, config: config };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+  function exportDataToFile() {
+    var payload = { version: "v2026_clean", shiftData: shiftData, config: config };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
     a.href = url;
-    a.download = `shift_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.download = 'shift_backup_' + new Date().toISOString().slice(0,10) + '.json';
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }
 
-  window.importDataFromFile = function(event) {
-    const file = event.target.files[0];
+  function importDataFromFile(event) {
+    var file = event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
+    var reader = new FileReader();
     reader.onload = function(e) {
       try {
-        const parsed = JSON.parse(e.target.result);
+        var parsed = JSON.parse(e.target.result);
         if (parsed.shiftData) {
           shiftData = parsed.shiftData;
-          if (parsed.config) config = Object.assign(config, parsed.config);
+          if (parsed.config) config = parsed.config;
           persistData();
-          window.renderControls();
-          window.renderCalendar();
-          window.updateSummary();
-          window.calculateJidoAllowance();
+          renderControls();
+          renderCalendar();
+          updateSummary();
+          calculateJidoAllowance();
           alert('バックアップデータを正常に復元しました！');
-          window.closeDataModal();
+          closeDataModal();
         }
       } catch(err) {
         alert('ファイルの読み込みに失敗しました。');
       }
     };
     reader.readAsText(file);
-  };
+  }
 
-  window.prevMonth = function() {
+  function prevMonth() {
     currentMonth--;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-    window.renderCalendar();
-    window.updateSummary();
-  };
+    renderCalendar();
+    updateSummary();
+  }
 
-  window.nextMonth = function() {
+  function nextMonth() {
     currentMonth++;
     if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-    window.renderCalendar();
-    window.updateSummary();
-  };
+    renderCalendar();
+    updateSummary();
+  }
 
-  // 即時起動（イベント待ちによる不発を完全防止）
-  window.renderControls();
-  window.renderCalendar();
-  window.updateSummary();
-  window.calculateJidoAllowance();
-})();
+  // 即座に初期描画を実行
+  renderControls();
+  renderCalendar();
+  updateSummary();
+  calculateJidoAllowance();
 </script>
 </body>
 </html>
