@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>シフト・給与自動計算カレンダー</title>
+<title>シフト・給与自動計算 & 児童扶養手当予測カレンダー</title>
 <style>
   :root {
     --primary: #2563eb;
@@ -133,10 +133,10 @@
 <!-- サマリーカード -->
 <div class="dashboard" id="dashboardContainer"></div>
 
-<!-- 児童扶養手当シミュレーターパネル -->
+<!-- 児童扶養手当シミュレーター -->
 <div class="jido-panel">
   <div class="jido-header">
-    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 全給与・養育費連動)</span>
+    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 給与・養育費連動)</span>
     <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
   </div>
   <div class="jido-details">
@@ -163,10 +163,7 @@
 </div>
 
 <!-- カレンダー枠 -->
-<div class="calendar-grid" id="calendar">
-  <div class="day-name">月</div><div class="day-name">火</div><div class="day-name">水</div>
-  <div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>
-</div>
+<div class="calendar-grid" id="calendar"></div>
 
 <!-- 日付設定モーダル -->
 <div class="modal" id="modal">
@@ -209,7 +206,7 @@
   <div class="modal-content" style="max-width:480px;">
     <div class="modal-header">⚙ 勤務先・給与設定</div>
     <div style="font-size:11px; color:#64748b; margin-bottom:10px;">
-      会社名、正社員（固定給）またはパート（時給・交通費）、一括投入のON/OFF、昇給・改定履歴を管理できます。
+      会社名、正社員（固定給）またはパート（時給・交通費）、一括投入ボタンのON/OFF、昇給履歴を管理できます。
     </div>
 
     <div id="companySettingsContainer"></div>
@@ -264,16 +261,13 @@
 </div>
 
 <script>
-  // グローバル変数定義
   var currentYear = 2026;
-  var currentMonth = 8; // 9月 (0-indexed)
+  var currentMonth = 8; // 9月
   var selectedDateKey = null;
 
-  // 完全に独立した新しい保存キー名（古い壊れたデータとの衝突を完全防止）
-  var KEY_DATA = "fresh_app_data_2026";
-  var KEY_CFG = "fresh_app_cfg_2026";
+  var KEY_DATA = "payroll_fresh_data_2026";
+  var KEY_CFG = "payroll_fresh_cfg_2026";
 
-  // 初期デフォルト設定
   var config = {
     childrenCount: 1,
     annualChildSupport: 480000,
@@ -283,7 +277,7 @@
         id: "c1",
         name: "会社1",
         color: "#3b82f6",
-        payType: "part", // "part" または "full"
+        payType: "part",
         netRate: 83,
         autoWeekday: true,
         autoWeekend: false,
@@ -311,23 +305,18 @@
 
   var shiftData = {};
 
-  // 安全な初期化読み込み
   try {
     var rawCfg = localStorage.getItem(KEY_CFG);
     if (rawCfg) {
       var pCfg = JSON.parse(rawCfg);
-      if (pCfg && pCfg.companies && pCfg.companies.length > 0) {
-        config = pCfg;
-      }
+      if (pCfg && pCfg.companies && pCfg.companies.length > 0) config = pCfg;
     }
     var rawD = localStorage.getItem(KEY_DATA);
     if (rawD) {
       var pD = JSON.parse(rawD);
       if (pD) shiftData = pD;
     }
-  } catch(e) {
-    console.warn("Storage warning:", e);
-  }
+  } catch(e) {}
 
   function getAppliedRate(comp, ymStr) {
     if (!comp || !comp.history || comp.history.length === 0) {
@@ -363,24 +352,16 @@
   function renderControls() {
     var container = document.getElementById('autoFillButtonsContainer');
     if (!container) return;
-    container.innerHTML = '';
-
+    var html = '';
     config.companies.forEach(function(comp) {
       if (comp.autoWeekday) {
-        var btn = document.createElement('button');
-        btn.className = 'btn btn-auto';
-        btn.innerText = '⚡ ' + comp.name + ' 平日一括';
-        btn.onclick = function() { autoFill(comp.id, 'weekday'); };
-        container.appendChild(btn);
+        html += '<button class="btn btn-auto" onclick="autoFill(\'' + comp.id + '\', \'weekday\')">⚡ ' + comp.name + ' 平日一括</button>';
       }
       if (comp.autoWeekend) {
-        var btn2 = document.createElement('button');
-        btn2.className = 'btn btn-auto';
-        btn2.innerText = '⚡ ' + comp.name + ' 土日一括';
-        btn2.onclick = function() { autoFill(comp.id, 'weekend'); };
-        container.appendChild(btn2);
+        html += '<button class="btn btn-auto" onclick="autoFill(\'' + comp.id + '\', \'weekend\')">⚡ ' + comp.name + ' 土日一括</button>';
       }
     });
+    container.innerHTML = html;
   }
 
   function renderCalendar() {
@@ -388,140 +369,106 @@
     if (titleEl) titleEl.innerText = currentYear + '年 ' + (currentMonth + 1) + '月';
     var cal = document.getElementById('calendar');
     if (!cal) return;
-    
-    var cells = cal.querySelectorAll('.day-cell');
-    for (var i = 0; i < cells.length; i++) {
-      cells[i].remove();
-    }
+
+    var html = '<div class="day-name">月</div><div class="day-name">火</div><div class="day-name">水</div>' +
+               '<div class="day-name">木</div><div class="day-name">金</div><div class="day-name sat">土</div><div class="day-name sun">日</div>';
 
     var firstDay = new Date(currentYear, currentMonth, 1).getDay();
     var offset = (firstDay + 6) % 7;
     var lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     for (var o = 0; o < offset; o++) {
-      var empty = document.createElement('div');
-      empty.className = 'day-cell empty';
-      cal.appendChild(empty);
+      html += '<div class="day-cell empty"></div>';
     }
 
     for (var d = 1; d <= lastDate; d++) {
-      (function(dayNum) {
-        var cell = document.createElement('div');
-        var mStr = (currentMonth + 1 < 10 ? '0' : '') + (currentMonth + 1);
-        var dStr = (dayNum < 10 ? '0' : '') + dayNum;
-        var dateKey = currentYear + '-' + mStr + '-' + dStr;
-        var dayOfWeek = new Date(currentYear, currentMonth, dayNum).getDay();
-        
-        var isAutoHoliday = !!HOLIDAYS[dateKey];
-        var data = shiftData[dateKey];
-        var isCustomHoliday = (data && data.isHoliday !== undefined) ? data.isHoliday : isAutoHoliday;
+      var mStr = (currentMonth + 1 < 10 ? '0' : '') + (currentMonth + 1);
+      var dStr = (d < 10 ? '0' : '') + d;
+      var dateKey = currentYear + '-' + mStr + '-' + dStr;
+      var dayOfWeek = new Date(currentYear, currentMonth, d).getDay();
 
-        var classList = ['day-cell'];
-        if (dayOfWeek === 6) classList.push('sat');
-        if (dayOfWeek === 0) classList.push('sun');
-        if (isCustomHoliday) classList.push('holiday');
-        cell.className = classList.join(' ');
-        cell.onclick = function() { openModal(dateKey, dayNum, isAutoHoliday); };
+      var isAutoHoliday = !!HOLIDAYS[dateKey];
+      var data = shiftData[dateKey];
+      var isCustomHoliday = (data && data.isHoliday !== undefined) ? data.isHoliday : isAutoHoliday;
 
-        var dayTop = document.createElement('div');
-        dayTop.className = 'day-top';
+      var cls = 'day-cell';
+      if (dayOfWeek === 6) cls += ' sat';
+      if (dayOfWeek === 0) cls += ' sun';
+      if (isCustomHoliday) cls += ' holiday';
 
-        var dayNumDiv = document.createElement('div');
-        dayNumDiv.className = 'day-num';
-        dayNumDiv.innerText = dayNum;
-        dayTop.appendChild(dayNumDiv);
+      var holidayTagHtml = isAutoHoliday ? ('<div class="holiday-tag">' + HOLIDAYS[dateKey] + '</div>') : '';
+      var badgesHtml = '';
 
-        if (isAutoHoliday) {
-          var holiTag = document.createElement('div');
-          holiTag.className = 'holiday-tag';
-          holiTag.innerText = HOLIDAYS[dateKey];
-          dayTop.appendChild(holiTag);
+      if (data) {
+        if (data.event) {
+          badgesHtml += '<div class="badge badge-event">' + data.event + '</div>';
         }
-        cell.appendChild(dayTop);
-
-        var badgeList = document.createElement('div');
-        badgeList.className = 'badge-list';
-
-        if (data) {
-          if (data.event) {
-            var bEvent = document.createElement('div');
-            bEvent.className = 'badge badge-event';
-            bEvent.innerText = data.event;
-            badgeList.appendChild(bEvent);
-          }
-          if (data.companies) {
-            config.companies.forEach(function(comp) {
-              var cData = data.companies[comp.id];
-              if (cData && cData.checked) {
-                var bComp = document.createElement('div');
-                bComp.className = 'badge';
-                bComp.style.backgroundColor = comp.color || '#3b82f6';
-                if (comp.payType === 'full') {
-                  bComp.innerText = comp.name;
-                } else {
-                  var h = cData.hours !== undefined ? cData.hours : (comp.defaultHours || 0);
-                  bComp.innerText = comp.name + ' ' + h + 'h';
-                }
-                badgeList.appendChild(bComp);
-              }
-            });
-          }
-          if (data.allowance > 0) {
-            var bAll = document.createElement('div');
-            bAll.className = 'badge badge-allowance';
-            bAll.innerText = data.allowanceNote ? data.allowanceNote : '+' + data.allowance.toLocaleString();
-            badgeList.appendChild(bAll);
-          }
+        if (data.companies) {
+          config.companies.forEach(function(comp) {
+            var cd = data.companies[comp.id];
+            if (cd && cd.checked) {
+              var bg = comp.color || '#3b82f6';
+              var txt = comp.payType === 'full' ? comp.name : (comp.name + ' ' + (cd.hours !== undefined ? cd.hours : (comp.defaultHours || 0)) + 'h');
+              badgesHtml += '<div class="badge" style="background-color:' + bg + ';">' + txt + '</div>';
+            }
+          });
         }
+        if (data.allowance > 0) {
+          var allTxt = data.allowanceNote ? data.allowanceNote : ('+' + data.allowance.toLocaleString());
+          badgesHtml += '<div class="badge badge-allowance">' + allTxt + '</div>';
+        }
+      }
 
-        cell.appendChild(badgeList);
-        cal.appendChild(cell);
-      })(d);
+      html += '<div class="' + cls + '" onclick="openModal(\'' + dateKey + '\', ' + d + ', ' + isAutoHoliday + ')">' +
+                '<div class="day-top">' +
+                  '<div class="day-num">' + d + '</div>' +
+                  holidayTagHtml +
+                '</div>' +
+                '<div class="badge-list">' + badgesHtml + '</div>' +
+              '</div>';
     }
+
+    cal.innerHTML = html;
   }
 
   function openModal(dateKey, day, isAutoHoliday) {
     selectedDateKey = dateKey;
     document.getElementById('modalDateTitle').innerText = (currentMonth + 1) + '月 ' + day + '日の設定';
-    
+
     var data = shiftData[dateKey] || { companies: {} };
     var compContainer = document.getElementById('modalCompanyList');
-    compContainer.innerHTML = '';
+    var html = '';
 
     config.companies.forEach(function(comp) {
-      var cData = (data.companies && data.companies[comp.id]) ? data.companies[comp.id] : {};
+      var cd = (data.companies && data.companies[comp.id]) ? data.companies[comp.id] : {};
       var rate = getAppliedRate(comp, dateKey);
 
-      var box = document.createElement('div');
-      box.className = 'form-group';
-      box.style.background = '#f8fafc';
-      box.style.border = '1px solid #e2e8f0';
-      box.style.borderRadius = '8px';
-      box.style.padding = '8px';
-
-      var rateText = "";
+      var rateText = '';
       if (comp.payType === 'full') {
         rateText = '月給: ' + rate.monthlySalary.toLocaleString() + '円';
       } else {
-        var dailyEstimate = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
-        rateText = '時給: ' + rate.hourly.toLocaleString() + '円 / 交通費: ' + rate.transit.toLocaleString() + '円 (日当換算 約' + dailyEstimate.toLocaleString() + '円)';
+        var dailyEst = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
+        rateText = '時給: ' + rate.hourly.toLocaleString() + '円 / 交通費: ' + rate.transit.toLocaleString() + '円 (1日換算 約' + dailyEst.toLocaleString() + '円)';
       }
 
-      var hoursVal = cData.hours !== undefined ? cData.hours : (comp.defaultHours || 0);
-      box.innerHTML = 
-        '<label class="checkbox-label" style="font-weight:600;">' +
-          '<input type="checkbox" id="modal_comp_check_' + comp.id + '" ' + (cData.checked ? 'checked' : '') + ' style="width:16px;height:16px;">' +
-          '<span style="color:' + (comp.color || '#1e293b') + '">' + comp.name + ' 出勤</span>' +
-        '</label>' +
-        '<div style="font-size:10px; color:#64748b; margin:2px 0 6px 22px;">' + rateText + '</div>' +
-        (comp.payType === 'part' ? 
-          '<div style="display:flex; align-items:center; gap:6px; margin-left:22px;">' +
-            '<span style="font-size:11px; color:#475569;">勤務時間:</span>' +
-            '<input type="number" id="modal_comp_hours_' + comp.id + '" class="form-input" style="width:80px; padding:4px 6px;" value="' + hoursVal + '" min="0" step="0.5">' +
-            '<span style="font-size:11px; color:#475569;">時間</span>' +
-          '</div>' : '');
-      compContainer.appendChild(box);
+      var hoursVal = cd.hours !== undefined ? cd.hours : (comp.defaultHours || 0);
+
+      html += '<div class="form-group" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">' +
+                '<label class="checkbox-label" style="font-weight:600;">' +
+                  '<input type="checkbox" id="modal_comp_check_' + comp.id + '" ' + (cd.checked ? 'checked' : '') + ' style="width:16px;height:16px;">' +
+                  '<span style="color:' + (comp.color || '#1e293b') + '">' + comp.name + ' 出勤</span>' +
+                '</label>' +
+                '<div style="font-size:10px; color:#64748b; margin:2px 0 6px 22px;">' + rateText + '</div>' +
+                (comp.payType === 'part' ? 
+                  ('<div style="display:flex; align-items:center; gap:6px; margin-left:22px;">' +
+                    '<span style="font-size:11px; color:#475569;">勤務時間:</span>' +
+                    '<input type="number" id="modal_comp_hours_' + comp.id + '" class="form-input" style="width:80px; padding:4px 6px;" value="' + hoursVal + '" min="0" step="0.5">' +
+                    '<span style="font-size:11px; color:#475569;">時間</span>' +
+                  '</div>') : '') +
+              '</div>';
     });
+
+    compContainer.innerHTML = html;
 
     document.getElementById('eventNote').value = data.event || '';
     document.getElementById('allowanceAmt').value = data.allowance || '';
@@ -656,15 +603,13 @@
     var overallNet = allowanceTotal;
     var container = document.getElementById('dashboardContainer');
     if (!container) return;
-    container.innerHTML = '';
 
-    var totalCard = document.createElement('div');
-    totalCard.className = 'card';
-    totalCard.innerHTML = 
-      '<div class="card-title">当月 実入金手取り</div>' +
-      '<div class="card-val total-val" id="totalNetVal">0円</div>' +
-      '<div class="card-sub">給料＋手当 合算</div>';
-    container.appendChild(totalCard);
+    var cardsHtml = 
+      '<div class="card">' +
+        '<div class="card-title">当月 実入金手取り</div>' +
+        '<div class="card-val total-val" id="totalNetVal">0円</div>' +
+        '<div class="card-sub">給料＋手当 合算</div>' +
+      '</div>';
 
     config.companies.forEach(function(comp) {
       var sum = compSummary[comp.id];
@@ -674,27 +619,26 @@
       sum.net = Math.round(sum.gross * ((comp.netRate || 100) / 100));
       overallNet += sum.net;
 
-      var card = document.createElement('div');
-      card.className = 'card';
       var subText = comp.payType === 'full' ? 
         ('出勤: ' + sum.days + '日 (総額: ' + sum.gross.toLocaleString() + '円)') :
         ('出勤: ' + sum.days + '日 / ' + sum.totalHours + 'h (総額: ' + sum.gross.toLocaleString() + '円)');
 
-      card.innerHTML = 
-        '<div class="card-title" style="color:' + (comp.color || '#334155') + '; font-weight:bold;">' + comp.name + ' 手取り</div>' +
-        '<div class="card-val">' + sum.net.toLocaleString() + '円</div>' +
-        '<div class="card-sub">' + subText + '</div>';
-      container.appendChild(card);
+      cardsHtml += 
+        '<div class="card">' +
+          '<div class="card-title" style="color:' + (comp.color || '#334155') + '; font-weight:bold;">' + comp.name + ' 手取り</div>' +
+          '<div class="card-val">' + sum.net.toLocaleString() + '円</div>' +
+          '<div class="card-sub">' + subText + '</div>' +
+        '</div>';
     });
 
-    var allCard = document.createElement('div');
-    allCard.className = 'card';
-    allCard.innerHTML = 
-      '<div class="card-title">手当・養育費</div>' +
-      '<div class="card-val">' + allowanceTotal.toLocaleString() + '円</div>' +
-      '<div class="card-sub">児童手当・養育費など</div>';
-    container.appendChild(allCard);
+    cardsHtml += 
+      '<div class="card">' +
+        '<div class="card-title">手当・養育費</div>' +
+        '<div class="card-val">' + allowanceTotal.toLocaleString() + '円</div>' +
+        '<div class="card-sub">児童手当・養育費など</div>' +
+      '</div>';
 
+    container.innerHTML = cardsHtml;
     var totalNetEl = document.getElementById('totalNetVal');
     if (totalNetEl) totalNetEl.innerText = overallNet.toLocaleString() + '円';
   }
@@ -793,12 +737,9 @@
   function renderCompanySettingsUI() {
     var container = document.getElementById('companySettingsContainer');
     if (!container) return;
-    container.innerHTML = '';
 
+    var html = '';
     config.companies.forEach(function(comp, cIdx) {
-      var card = document.createElement('div');
-      card.className = 'company-card';
-
       var tiersHtml = '';
       comp.history.slice().sort(function(a, b) { return a.startYM.localeCompare(b.startYM); }).forEach(function(tier, tIdx) {
         tiersHtml += 
@@ -819,52 +760,54 @@
           '</div>';
       });
 
-      card.innerHTML = 
-        '<div class="company-card-header">' +
-          '<input type="text" class="form-input" style="font-weight:bold; width:65%; font-size:13px;" value="' + comp.name + '" placeholder="会社名" onchange="updateCompField(' + cIdx + ', \'name\', this.value)">' +
-          (config.companies.length > 1 ? '<button class="btn" style="padding:2px 6px; font-size:10px; color:#ef4444;" onclick="deleteCompany(' + cIdx + ')">削除</button>' : '') +
-        '</div>' +
-        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">' +
-          '<div>' +
-            '<label class="form-label">給与形態</label>' +
-            '<select class="form-input" onchange="updateCompField(' + cIdx + ', \'payType\', this.value)">' +
-              '<option value="part" ' + (comp.payType === 'part' ? 'selected' : '') + '>パート・アルバイト (時給)</option>' +
-              '<option value="full" ' + (comp.payType === 'full' ? 'selected' : '') + '>正社員 (固定月給)</option>' +
-            '</select>' +
+      html += 
+        '<div class="company-card">' +
+          '<div class="company-card-header">' +
+            '<input type="text" class="form-input" style="font-weight:bold; width:65%; font-size:13px;" value="' + comp.name + '" placeholder="会社名" onchange="updateCompField(' + cIdx + ', \'name\', this.value)">' +
+            (config.companies.length > 1 ? '<button class="btn" style="padding:2px 6px; font-size:10px; color:#ef4444;" onclick="deleteCompany(' + cIdx + ')">削除</button>' : '') +
           '</div>' +
-          '<div>' +
-            '<label class="form-label">手取り率目安 (%)</label>' +
-            '<input type="number" class="form-input" value="' + (comp.netRate || 100) + '" onchange="updateCompField(' + cIdx + ', \'netRate\', this.value)">' +
+          '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">' +
+            '<div>' +
+              '<label class="form-label">給与形態</label>' +
+              '<select class="form-input" onchange="updateCompField(' + cIdx + ', \'payType\', this.value)">' +
+                '<option value="part" ' + (comp.payType === 'part' ? 'selected' : '') + '>パート・アルバイト (時給)</option>' +
+                '<option value="full" ' + (comp.payType === 'full' ? 'selected' : '') + '>正社員 (固定月給)</option>' +
+              '</select>' +
+            '</div>' +
+            '<div>' +
+              '<label class="form-label">手取り率目安 (%)</label>' +
+              '<input type="number" class="form-input" value="' + (comp.netRate || 100) + '" onchange="updateCompField(' + cIdx + ', \'netRate\', this.value)">' +
+            '</div>' +
           '</div>' +
-        '</div>' +
-        (comp.payType === 'part' ? 
-          ('<div class="form-group">' +
-            '<label class="form-label">標準勤務時間 (時間/日)</label>' +
-            '<input type="number" class="form-input" value="' + (comp.defaultHours || 0) + '" step="0.5" onchange="updateCompField(' + cIdx + ', \'defaultHours\', this.value)">' +
-          '</div>') : '') +
-        '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:6px; margin-bottom:8px;">' +
-          '<div style="font-size:10.5px; font-weight:bold; color:#475569; margin-bottom:4px;">一括投入ボタンの表示設定</div>' +
-          '<div style="display:flex; gap:12px;">' +
-            '<label class="checkbox-label" style="font-size:11px;">' +
-              '<input type="checkbox" ' + (comp.autoWeekday ? 'checked' : '') + ' onchange="updateCompField(' + cIdx + ', \'autoWeekday\', this.checked)">' +
-              '平日一括を有効' +
-            '</label>' +
-            '<label class="checkbox-label" style="font-size:11px;">' +
-              '<input type="checkbox" ' + (comp.autoWeekend ? 'checked' : '') + ' onchange="updateCompField(' + cIdx + ', \'autoWeekend\', this.checked)">' +
-              '土日一括を有効' +
-            '</label>' +
+          (comp.payType === 'part' ? 
+            ('<div class="form-group">' +
+              '<label class="form-label">標準勤務時間 (時間/日)</label>' +
+              '<input type="number" class="form-input" value="' + (comp.defaultHours || 0) + '" step="0.5" onchange="updateCompField(' + cIdx + ', \'defaultHours\', this.value)">' +
+            '</div>') : '') +
+          '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:6px; margin-bottom:8px;">' +
+            '<div style="font-size:10.5px; font-weight:bold; color:#475569; margin-bottom:4px;">一括投入ボタンの表示設定</div>' +
+            '<div style="display:flex; gap:12px;">' +
+              '<label class="checkbox-label" style="font-size:11px;">' +
+                '<input type="checkbox" ' + (comp.autoWeekday ? 'checked' : '') + ' onchange="updateCompField(' + cIdx + ', \'autoWeekday\', this.checked)">' +
+                '平日一括を有効' +
+              '</label>' +
+              '<label class="checkbox-label" style="font-size:11px;">' +
+                '<input type="checkbox" ' + (comp.autoWeekend ? 'checked' : '') + ' onchange="updateCompField(' + cIdx + ', \'autoWeekend\', this.checked)">' +
+                '土日一括を有効' +
+              '</label>' +
+            '</div>' +
           '</div>' +
-        '</div>' +
-        '<div style="margin-top:8px;">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-            '<span style="font-size:11px; font-weight:bold; color:var(--primary);">■ 昇給・改定履歴</span>' +
-            '<button class="btn btn-primary" style="padding:2px 6px; font-size:9px;" onclick="addCompTier(' + cIdx + ')">＋ 改定・昇給を追加</button>' +
+          '<div style="margin-top:8px;">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+              '<span style="font-size:11px; font-weight:bold; color:var(--primary);">■ 昇給・改定履歴</span>' +
+              '<button class="btn btn-primary" style="padding:2px 6px; font-size:9px;" onclick="addCompTier(' + cIdx + ')">＋ 改定・昇給を追加</button>' +
+            '</div>' +
+            tiersHtml +
           '</div>' +
-          tiersHtml +
         '</div>';
-
-      container.appendChild(card);
     });
+
+    container.innerHTML = html;
   }
 
   function updateCompField(cIdx, field, val) {
@@ -973,7 +916,7 @@
   function closeDataModal() { document.getElementById('dataModal').style.display = 'none'; }
 
   function exportDataToFile() {
-    var payload = { version: "v2026_clean", shiftData: shiftData, config: config };
+    var payload = { version: "tested_v2026", shiftData: shiftData, config: config };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -1022,7 +965,7 @@
     updateSummary();
   }
 
-  // 即座に初期描画を実行
+  // 起動時の初期化実行
   renderControls();
   renderCalendar();
   updateSummary();
