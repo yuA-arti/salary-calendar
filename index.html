@@ -136,7 +136,7 @@
 <!-- 児童扶養手当シミュレーター -->
 <div class="jido-panel">
   <div class="jido-header">
-    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 給与・養育費連動)</span>
+    <span class="jido-title">🏛️ 児童扶養手当 予測 (姶良市基準 / 全給与・養育費連動)</span>
     <span class="jido-result" id="jidoMonthlyEstimate">計算中...</span>
   </div>
   <div class="jido-details">
@@ -275,7 +275,7 @@
     companies: [
       {
         id: "c1",
-        name: "会社1",
+        name: "メークス",
         color: "#3b82f6",
         payType: "part",
         netRate: 83,
@@ -289,7 +289,7 @@
       },
       {
         id: "c2",
-        name: "会社2",
+        name: "はま寿司",
         color: "#10b981",
         payType: "part",
         netRate: 96,
@@ -408,7 +408,9 @@
             var cd = data.companies[comp.id];
             if (cd && cd.checked) {
               var bg = comp.color || '#3b82f6';
-              var txt = comp.payType === 'full' ? comp.name : (comp.name + ' ' + (cd.hours !== undefined ? cd.hours : (comp.defaultHours || 0)) + 'h');
+              // 日付ごとに保存された個別時間を優先表示（完全独立）
+              var h = (cd.hours !== undefined && cd.hours !== null) ? cd.hours : (comp.defaultHours || 0);
+              var txt = comp.payType === 'full' ? comp.name : (comp.name + ' ' + h + 'h');
               badgesHtml += '<div class="badge" style="background-color:' + bg + ';">' + txt + '</div>';
             }
           });
@@ -443,15 +445,16 @@
       var cd = (data.companies && data.companies[comp.id]) ? data.companies[comp.id] : {};
       var rate = getAppliedRate(comp, dateKey);
 
+      // その日専用に保存されている個別時間を取得。未設定ならデフォルト時間をセット
+      var currentHours = (cd.hours !== undefined && cd.hours !== null) ? cd.hours : (comp.defaultHours || 0);
+
       var rateText = '';
       if (comp.payType === 'full') {
         rateText = '月給: ' + rate.monthlySalary.toLocaleString() + '円';
       } else {
-        var dailyEst = (rate.hourly * (comp.defaultHours || 0)) + (rate.transit || 0);
-        rateText = '時給: ' + rate.hourly.toLocaleString() + '円 / 交通費: ' + rate.transit.toLocaleString() + '円 (1日換算 約' + dailyEst.toLocaleString() + '円)';
+        var dailyEst = (rate.hourly * currentHours) + (rate.transit || 0);
+        rateText = '時給: ' + rate.hourly.toLocaleString() + '円 / 交通費: ' + rate.transit.toLocaleString() + '円 (日給換算 約' + Math.round(dailyEst).toLocaleString() + '円)';
       }
-
-      var hoursVal = cd.hours !== undefined ? cd.hours : (comp.defaultHours || 0);
 
       html += '<div class="form-group" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">' +
                 '<label class="checkbox-label" style="font-weight:600;">' +
@@ -462,7 +465,7 @@
                 (comp.payType === 'part' ? 
                   ('<div style="display:flex; align-items:center; gap:6px; margin-left:22px;">' +
                     '<span style="font-size:11px; color:#475569;">勤務時間:</span>' +
-                    '<input type="number" id="modal_comp_hours_' + comp.id + '" class="form-input" style="width:80px; padding:4px 6px;" value="' + hoursVal + '" min="0" step="0.5">' +
+                    '<input type="number" id="modal_comp_hours_' + comp.id + '" class="form-input" style="width:85px; padding:4px 6px;" value="' + currentHours + '" min="0" step="0.25">' +
                     '<span style="font-size:11px; color:#475569;">時間</span>' +
                   '</div>') : '') +
               '</div>';
@@ -490,7 +493,13 @@
       var chk = document.getElementById('modal_comp_check_' + comp.id);
       var hoursEl = document.getElementById('modal_comp_hours_' + comp.id);
       var isChecked = chk ? chk.checked : false;
-      var hours = hoursEl ? parseFloat(hoursEl.value) || 0 : 0;
+
+      // 個別に入力された時間を数値として確実に固定保持
+      var hours = 0;
+      if (hoursEl) {
+        var parsedH = parseFloat(hoursEl.value);
+        hours = (!isNaN(parsedH) && parsedH >= 0) ? parsedH : (comp.defaultHours || 0);
+      }
 
       if (isChecked) {
         hasCompanyChecked = true;
@@ -530,7 +539,7 @@
     if (!comp) return;
 
     var label = targetType === 'weekday' ? '平日（月〜金・祝日除く）' : '土曜日・日曜日';
-    if (!confirm((currentMonth + 1) + '月の' + label + 'に「' + comp.name + '」を一括入力しますか？')) return;
+    if (!confirm((currentMonth + 1) + '月の' + label + 'に「' + comp.name + '」を一括入力しますか？\n※すでに入力されている個別時間は上書きされます。')) return;
 
     var lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
     for (var d = 1; d <= lastDate; d++) {
@@ -550,7 +559,8 @@
       if (match) {
         if (!shiftData[dateKey]) shiftData[dateKey] = { companies: {} };
         if (!shiftData[dateKey].companies) shiftData[dateKey].companies = {};
-        shiftData[dateKey].companies[comp.id] = { checked: true, hours: comp.defaultHours || 0 };
+        // 一括投入時も個別の時間として明示的に数値をセット
+        shiftData[dateKey].companies[comp.id] = { checked: true, hours: (comp.defaultHours || 0) };
       }
     }
 
@@ -588,7 +598,8 @@
             var cd = val.companies[comp.id];
             if (cd && cd.checked) {
               compSummary[comp.id].days++;
-              var h = (cd.hours !== undefined) ? cd.hours : (comp.defaultHours || 0);
+              // その日保存された個別時間をそのまま加算
+              var h = (cd.hours !== undefined && cd.hours !== null) ? cd.hours : (comp.defaultHours || 0);
               compSummary[comp.id].totalHours += h;
               if (comp.payType === 'part') {
                 var r = compSummary[comp.id].rate;
@@ -621,7 +632,7 @@
 
       var subText = comp.payType === 'full' ? 
         ('出勤: ' + sum.days + '日 (総額: ' + sum.gross.toLocaleString() + '円)') :
-        ('出勤: ' + sum.days + '日 / ' + sum.totalHours + 'h (総額: ' + sum.gross.toLocaleString() + '円)');
+        ('出勤: ' + sum.days + '日 / ' + Math.round(sum.totalHours * 100) / 100 + 'h (総額: ' + sum.gross.toLocaleString() + '円)');
 
       cardsHtml += 
         '<div class="card">' +
@@ -667,7 +678,7 @@
             if (cd && cd.checked) {
               var rate = getAppliedRate(comp, key);
               if (comp.payType === 'part') {
-                var h = (cd.hours !== undefined) ? cd.hours : (comp.defaultHours || 0);
+                var h = (cd.hours !== undefined && cd.hours !== null) ? cd.hours : (comp.defaultHours || 0);
                 calendarSalary += (rate.hourly * h) + (rate.transit || 0);
               }
             }
@@ -730,7 +741,7 @@
       document.getElementById('jidoAnnualSalary').innerText = '年間給与見込: 約 ' + Math.round(annualGrossSalary).toLocaleString() + '円';
       document.getElementById('jidoAnnualChildSupport').innerText = '年間養育費: ' + annualChildSupport.toLocaleString() + '円 (算入: ' + childSupportAdded.toLocaleString() + '円)';
       document.getElementById('jidoCalculatedIncome').innerText = '判定所得額: ' + calculatedIncome.toLocaleString() + '円';
-      document.getElementById('jidoStatus').innerText = '区分: ' + statusText;
+      document.getElementById('jidoStatus').innerText = '区分: ${statusText}';
     }
   }
 
@@ -782,7 +793,7 @@
           (comp.payType === 'part' ? 
             ('<div class="form-group">' +
               '<label class="form-label">標準勤務時間 (時間/日)</label>' +
-              '<input type="number" class="form-input" value="' + (comp.defaultHours || 0) + '" step="0.5" onchange="updateCompField(' + cIdx + ', \'defaultHours\', this.value)">' +
+              '<input type="number" class="form-input" value="' + (comp.defaultHours || 0) + '" step="0.25" onchange="updateCompField(' + cIdx + ', \'defaultHours\', this.value)">' +
             '</div>') : '') +
           '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:6px; margin-bottom:8px;">' +
             '<div style="font-size:10.5px; font-weight:bold; color:#475569; margin-bottom:4px;">一括投入ボタンの表示設定</div>' +
@@ -916,7 +927,7 @@
   function closeDataModal() { document.getElementById('dataModal').style.display = 'none'; }
 
   function exportDataToFile() {
-    var payload = { version: "tested_v2026", shiftData: shiftData, config: config };
+    var payload = { version: "v2026_isolated", shiftData: shiftData, config: config };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
